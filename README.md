@@ -25,7 +25,30 @@
 - **Git** for cloning the repository
 - **pip** for installing dependencies
 
-### Step 1: Clone the Repository
+### Option A: Install via APT (Debian/Ubuntu)
+
+The easiest way to install fluxgen on Debian/Ubuntu systems:
+
+```bash
+# Add the GPG key
+curl -fsSL https://kanchankjha.github.io/fluxgen/fluxgen.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/fluxgen-archive-keyring.gpg
+
+# Add the repository
+echo "deb [signed-by=/usr/share/keyrings/fluxgen-archive-keyring.gpg] https://kanchankjha.github.io/fluxgen stable main" | sudo tee /etc/apt/sources.list.d/fluxgen.list
+
+# Update and install
+sudo apt-get update
+sudo apt-get install fluxgen
+```
+
+After installation, fluxgen is ready to use:
+```bash
+fluxgen --help
+```
+
+### Option B: Install from Source
+
+#### Step 1: Clone the Repository
 
 ```bash
 # Clone the repository

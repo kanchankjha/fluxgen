@@ -1,0 +1,10 @@
+fluxgen (0.1.0-1) unstable; urgency=medium
+
+  * Initial release.
+  * Multi-client traffic generator inspired by hping3
+  * Supports TCP, UDP, ICMP, IGMP, GRE, ESP, AH, SCTP protocols
+  * Spoofed IP/MAC addresses per simulated client
+  * YAML/JSON configuration file support
+  * Traffic capture to PCAP files
+
+ -- Kanchan Kumar Jha <kanchankjha@gmail.com>  Wed, 12 Feb 2026 12:00:00 +0000

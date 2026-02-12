@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fluxgen"
+version = "0.1.0"
+description = "Multi-client traffic generator inspired by hping3"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [{ name = "Kanchan Kumar Jha", email = "kanchankjha@gmail.com" }]
+dependencies = [
+    "scapy>=2.5",
+    "psutil>=5.9",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-mock>=3.10",
+]
+extras = ["netifaces>=0.11"]
+
+[project.scripts]
+fluxgen = "fluxgen.cli:main"

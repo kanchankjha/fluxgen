@@ -23,101 +23,90 @@
 - **Linux** operating system (required for raw socket support)
 - **Root privileges** or CAP_NET_RAW capability
 - **Git** for cloning the repository
-- **pip** for installing dependencies
+- **pip** for universal fallback installation
 
-### Option A: Install via APT (Debian/Ubuntu)
+### Supported Flavors
 
-The easiest way to install fluxgen on Debian/Ubuntu systems:
+Current packaging and CI target these distro families:
+- **Debian family:** Debian, Ubuntu, Kali, Parrot
+- **RHEL family:** CentOS Stream / compatible distributions
+
+`fluxgen` is distributed through:
+- **Python source install** (`pip` from git) for universal Linux fallback
+- **APT package** (`.deb` repository)
+- **RPM package** (`.rpm` repository)
+
+### Debian/Ubuntu/Kali/Parrot (APT)
 
 ```bash
-# Add the GPG key
-curl -fsSL https://kanchankjha.github.io/fluxgen/fluxgen.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/fluxgen-archive-keyring.gpg
+# 1) Install key
+curl -fL https://raw.githubusercontent.com/kanchankjha/fluxgen/apt-repo/fluxgen.gpg.key -o /tmp/fluxgen.gpg.key
+sudo gpg --dearmor --yes -o /usr/share/keyrings/fluxgen-archive-keyring.gpg /tmp/fluxgen.gpg.key
 
-# Add the repository
-echo "deb [signed-by=/usr/share/keyrings/fluxgen-archive-keyring.gpg] https://kanchankjha.github.io/fluxgen stable main" | sudo tee /etc/apt/sources.list.d/fluxgen.list
+# 2) Add repository
+echo "deb [arch=all signed-by=/usr/share/keyrings/fluxgen-archive-keyring.gpg] https://raw.githubusercontent.com/kanchankjha/fluxgen/apt-repo stable main" | sudo tee /etc/apt/sources.list.d/fluxgen.list
 
-# Update and install
+# 3) Install package
 sudo apt-get update
-sudo apt-get install fluxgen
+sudo apt-get install -y fluxgen
 ```
 
-After installation, fluxgen is ready to use:
+If dependency resolution fails on older bases, use the `pip` method below.
+
+### CentOS Stream / RHEL-like (RPM)
+
 ```bash
-fluxgen --help
+# 1) Add repository
+sudo tee /etc/yum.repos.d/fluxgen.repo >/dev/null <<'EOF'
+[fluxgen]
+name=Fluxgen RPM Repository
+baseurl=https://raw.githubusercontent.com/kanchankjha/fluxgen/yum-repo/
+enabled=1
+gpgcheck=0
+repo_gpgcheck=0
+EOF
+
+# 2) Install package
+sudo dnf makecache
+sudo dnf install -y fluxgen
 ```
 
-### Option B: Install from Source
+### Universal Linux Fallback (pip)
 
-#### Step 1: Clone the Repository
+Use this when distro packages are unavailable or dependency-solvers conflict.
 
 ```bash
-# Clone the repository
+python3 -m venv ~/.venvs/fluxgen
+~/.venvs/fluxgen/bin/pip install --upgrade pip
+~/.venvs/fluxgen/bin/pip install git+https://github.com/kanchankjha/fluxgen.git
+~/.venvs/fluxgen/bin/fluxgen --help
+```
+
+If/when published to PyPI, you can use:
+
+```bash
+~/.venvs/fluxgen/bin/pip install meraki-fluxgen
+```
+
+`fluxgen` on PyPI is already used by another project, so this project publishes
+the Python package under `meraki-fluxgen` while keeping the CLI command name
+as `fluxgen`.
+
+### Source Install (Development)
+
+```bash
 git clone https://github.com/kanchankjha/fluxgen.git
-
-# Navigate to the fluxgen directory
 cd fluxgen
-```
-
-### Step 2: Create Virtual Environment (Recommended)
-
-```bash
-# Create a virtual environment
 python3 -m venv .venv
-
-# Activate the virtual environment
 source .venv/bin/activate
+pip install --upgrade pip
+pip install -e ".[dev]"
+fluxgen --help
 ```
 
 **Note:** fluxgen requires Linux for raw socket support. macOS and Windows are not supported for packet sending.
 
-### Step 3: Install Dependencies
-
-```bash
-# Upgrade pip
-pip install --upgrade pip
-
-# Install required dependencies
-pip install -r requirements.txt
-```
-
-**Dependencies installed:**
-- `scapy>=2.5` - Packet crafting and network manipulation
-- `psutil>=5.9` - System and network interface information
-- `pyyaml>=6.0` - YAML configuration file support
-- `netifaces>=0.11` - Network interface enumeration
-
-### Step 4: Install fluxgen
-
-You can install fluxgen in multiple ways:
-
-#### Option A: Install as Editable Package (Recommended for Development)
-
-```bash
-# Install in development mode
-pip install -e .
-
-# Now you can run from anywhere
-fluxgen --help
-```
-
-#### Option B: Install as Package
-
-```bash
-# Build and install
-pip install .
-
-# Run the installed command
-fluxgen --help
-```
-
-#### Option C: Run as Module (No Installation)
-
-```bash
-# Run directly from the repository
-python3 -m fluxgen --help
-```
-
-### Step 5: Grant Network Capabilities
+### Grant Network Capabilities
 
 fluxgen needs raw socket access to craft and send custom packets. You have two options:
 
@@ -803,4 +792,3 @@ pip install -e .
 ## License
 
 This project is provided as-is for educational and testing purposes. Ensure you have proper authorization before using fluxgen on any network.
-

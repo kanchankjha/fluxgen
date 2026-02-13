@@ -24,9 +24,9 @@ Package: fluxgen
 Architecture: all
 Depends: ${python3:Depends},
          ${misc:Depends},
-         python3-scapy (>= 2.5),
-         python3-psutil (>= 5.9),
-         python3-yaml (>= 6.0)
+         python3-scapy,
+         python3-psutil,
+         python3-yaml
 Suggests: python3-netifaces
 Description: Multi-client traffic generator inspired by hping3
  fluxgen is a powerful multi-client traffic generator that simulates

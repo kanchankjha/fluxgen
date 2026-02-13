@@ -25,33 +25,40 @@
 - **Git** for cloning the repository
 - **pip** for universal fallback installation
 
-### Supported Flavors
+### Quick Install (Recommended)
 
-Current packaging and CI target these distro families:
-- **Debian family:** Debian, Ubuntu, Kali, Parrot
-- **RHEL family:** CentOS Stream / compatible distributions
+Works on all Linux flavors listed below and avoids distro package conflicts:
 
-`fluxgen` is distributed through:
-- **Python source install** (`pip` from git) for universal Linux fallback
-- **APT package** (`.deb` repository)
-- **RPM package** (`.rpm` repository)
+```bash
+python3 -m venv ~/.venvs/fluxgen
+~/.venvs/fluxgen/bin/pip install --upgrade pip
+~/.venvs/fluxgen/bin/pip install git+https://github.com/kanchankjha/fluxgen.git
+~/.venvs/fluxgen/bin/fluxgen --help
+```
+
+Run traffic commands with root/capabilities:
+
+```bash
+sudo ~/.venvs/fluxgen/bin/fluxgen --help
+```
+
+### Distro Package Install (Optional)
+
+Current packaging and CI target:
+- **Debian family:** Debian, Ubuntu, Kali, Parrot (APT)
+- **RHEL family:** CentOS Stream / compatible (RPM)
+
+Use distro packages if you prefer system-managed installs.
 
 ### Debian/Ubuntu/Kali/Parrot (APT)
 
 ```bash
-# 1) Install key
 curl -fL https://raw.githubusercontent.com/kanchankjha/fluxgen/apt-repo/fluxgen.gpg.key -o /tmp/fluxgen.gpg.key
 sudo gpg --dearmor --yes -o /usr/share/keyrings/fluxgen-archive-keyring.gpg /tmp/fluxgen.gpg.key
-
-# 2) Add repository
 echo "deb [arch=all signed-by=/usr/share/keyrings/fluxgen-archive-keyring.gpg] https://raw.githubusercontent.com/kanchankjha/fluxgen/apt-repo stable main" | sudo tee /etc/apt/sources.list.d/fluxgen.list
-
-# 3) Install package
 sudo apt-get update
 sudo apt-get install -y fluxgen
 ```
-
-If dependency resolution fails on older bases, use the `pip` method below.
 
 ### CentOS Stream / RHEL-like (RPM)
 
@@ -72,15 +79,7 @@ sudo dnf install -y fluxgen
 ```
 
 ### Universal Linux Fallback (pip)
-
-Use this when distro packages are unavailable or dependency-solvers conflict.
-
-```bash
-python3 -m venv ~/.venvs/fluxgen
-~/.venvs/fluxgen/bin/pip install --upgrade pip
-~/.venvs/fluxgen/bin/pip install git+https://github.com/kanchankjha/fluxgen.git
-~/.venvs/fluxgen/bin/fluxgen --help
-```
+This is the same as the Quick Install above.
 
 If/when published to PyPI, you can use:
 

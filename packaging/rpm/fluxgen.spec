@@ -35,6 +35,7 @@ addresses from the same subnet.
 %pyproject_save_files fluxgen
 
 %files -f %{pyproject_files}
+%{_bindir}/fluxgen
 %license LICENSE
 %doc README.md
 

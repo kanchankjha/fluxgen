@@ -39,5 +39,5 @@ addresses from the same subnet.
 %doc README.md
 
 %changelog
-* Thu Feb 13 2026 Kanchan Kumar Jha <kanchankjha@gmail.com> - 0.1.0-1
+* Fri Feb 13 2026 Kanchan Kumar Jha <kanchankjha@gmail.com> - 0.1.0-1
 - Initial RPM package

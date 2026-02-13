@@ -1,3 +1,12 @@
+fluxgen (0.1.1-1) unstable; urgency=medium
+
+  * Release 0.1.1:
+  * Add multi-distro packaging and publishing pipeline
+  * Add RPM packaging support and YUM repo metadata generation
+  * Improve APT repo metadata generation and install docs
+
+ -- Kanchan Kumar Jha <kanchankjha@gmail.com>  Fri, 13 Feb 2026 19:20:00 +0000
+
 fluxgen (0.1.0-1) unstable; urgency=medium
 
   * Initial release.

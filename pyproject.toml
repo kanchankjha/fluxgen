@@ -25,3 +25,8 @@ extras = ["netifaces>=0.11"]
 
 [project.scripts]
 fluxgen = "fluxgen.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fluxgen*"]
+exclude = ["tests*", "packaging*"]

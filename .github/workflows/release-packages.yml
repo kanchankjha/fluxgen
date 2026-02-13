@@ -127,6 +127,7 @@ jobs:
 
       - name: Build source tarball
         run: |
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
           VERSION=$(python3 - <<'PY'
           import tomllib
           with open("pyproject.toml", "rb") as f:

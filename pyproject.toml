@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meraki-fluxgen"
-version = "0.1.1"
+version = "1.0.0"
 description = "Multi-client traffic generator inspired by hping3"
 readme = "README.md"
 requires-python = ">=3.8"

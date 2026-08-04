@@ -130,6 +130,54 @@ class TestMergeConfig:
 class TestBuildRuntimeConfig:
     """Test building RuntimeConfig from dictionary."""
 
+    def test_beast_defaults_to_indefinite(self):
+        cfg = build_runtime_config({
+            "interface": "eth0", "dst": "10.0.0.1", "beast": True
+        })
+        assert cfg.beast is True
+        assert cfg.count == 0
+        assert cfg.duration == 0.0
+
+    def test_beast_duration_and_explicit_count(self):
+        cfg = build_runtime_config({
+            "interface": "eth0",
+            "dst": "10.0.0.1",
+            "beast": True,
+            "duration": 30,
+            "count": 10,
+        })
+        assert cfg.duration == 30.0
+        assert cfg.count == 10
+
+    @pytest.mark.parametrize("value", [-1, -0.1])
+    def test_negative_duration_rejected(self, value):
+        with pytest.raises(ValueError, match="time must be zero"):
+            build_runtime_config({
+                "interface": "eth0", "dst": "10.0.0.1", "duration": value
+            })
+
+    @pytest.mark.parametrize("clients", [0, -1])
+    def test_invalid_client_count_rejected(self, clients):
+        with pytest.raises(ValueError, match="clients must be a positive"):
+            build_runtime_config({
+                "interface": "eth0", "dst": "10.0.0.1", "clients": clients
+            })
+
+    @pytest.mark.parametrize("option,value", [
+        ("proto", "udp"),
+        ("payload", "data"),
+        ("data_size", 100),
+        ("frag", True),
+    ])
+    def test_beast_rejects_fixed_packet_profiles(self, option, value):
+        with pytest.raises(ValueError, match="Beast mode controls packet profiles"):
+            build_runtime_config({
+                "interface": "eth0",
+                "dst": "10.0.0.1",
+                "beast": True,
+                option: value,
+            })
+
     def test_minimal_config(self):
         """Test building config with minimal required fields."""
         data = {"interface": "eth0", "dst": "10.0.0.1"}

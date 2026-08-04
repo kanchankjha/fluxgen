@@ -6,7 +6,13 @@ from scapy.all import Ether, IP, TCP, UDP, ICMP, Raw
 from fluxgen.config import RuntimeConfig
 from fluxgen.identity import Identity
 import fluxgen.packet_builder as packet_builder
-from fluxgen.packet_builder import build_frames, _build_payload
+from fluxgen.packet_builder import (
+    BEAST_PROTOCOLS_IPV4,
+    BEAST_PROTOCOLS_IPV6,
+    build_beast_profile,
+    build_frames,
+    _build_payload,
+)
 
 
 class TestBuildFrames:
@@ -72,6 +78,52 @@ class TestBuildFrames:
         assert frame.haslayer(UDP)
         assert frame[UDP].sport == 54321
         assert frame[UDP].dport == 53
+
+    def test_beast_profile_rotates_all_ipv4_protocols_and_exact_sizes(self, test_identity):
+        cfg = RuntimeConfig(interface="eth0", dst="10.0.0.5", beast=True)
+        observed = []
+        for index in range(len(BEAST_PROTOCOLS_IPV4)):
+            profile = build_beast_profile(4, 1500, index)
+            observed.append(profile.proto)
+            frame = build_frames(
+                cfg,
+                test_identity,
+                "10.0.0.5",
+                "aa:bb:cc:dd:ee:ff",
+                profile=profile,
+            )[0]
+            assert len(frame) == 60 + index
+        assert tuple(observed) == BEAST_PROTOCOLS_IPV4
+
+    def test_beast_profile_reaches_mtu_ceiling_and_wraps(self, test_identity):
+        cfg = RuntimeConfig(interface="eth0", dst="10.0.0.5", beast=True)
+        max_index = (14 + 1500) - 60
+        maximum = build_beast_profile(4, 1500, max_index)
+        wrapped = build_beast_profile(4, 1500, max_index + 1)
+        frame = build_frames(
+            cfg,
+            test_identity,
+            "10.0.0.5",
+            "aa:bb:cc:dd:ee:ff",
+            profile=maximum,
+        )[0]
+        assert maximum.target_frame_size == 1514
+        assert len(frame) == 1514
+        assert wrapped.target_frame_size == 60
+
+    def test_beast_ipv6_excludes_igmp_and_respects_minimum_size(self, test_identity):
+        profiles = [
+            build_beast_profile(6, 1500, index)
+            for index in range(len(BEAST_PROTOCOLS_IPV6))
+        ]
+        assert tuple(profile.proto for profile in profiles) == BEAST_PROTOCOLS_IPV6
+        assert profiles[0].target_frame_size == 74
+        assert "igmp" not in {profile.proto for profile in profiles}
+
+    def test_beast_honors_explicit_ports(self):
+        profile = build_beast_profile(4, 1500, 0, sport=1234, dport=443)
+        assert profile.sport == 1234
+        assert profile.dport == 443
 
     def test_build_icmp_frame(self, test_identity):
         """Test building ICMP frame."""

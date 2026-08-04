@@ -19,7 +19,7 @@ from scapy.layers.inet6 import getmacbyip6  # type: ignore
 from .config import RuntimeConfig
 from .identity import Identity, generate_identities
 from .netinfo import get_interface_info
-from .packet_builder import build_frames
+from .packet_builder import build_beast_profile, build_frames
 
 
 @dataclass
@@ -51,6 +51,8 @@ class Simulator:
         self.dest_mac_cache: Dict[str, str] = {}
         self.identities: List[Identity] = []
         self.writer: Optional[PcapWriter] = None
+        self.writer_lock = threading.Lock()
+        self.deadline: Optional[float] = None
 
     def run(self, pcap_writer: Optional[PcapWriter] = None) -> SendStats:
         iface_info = get_interface_info(self.cfg.interface, self.cfg.ip_version)
@@ -80,12 +82,19 @@ class Simulator:
             writer = PcapWriter(self.cfg.pcap_out, append=True, sync=True)
             created_writer = True
         self.writer = writer
+        raw_mtu = getattr(iface_info, "mtu", 1500)
+        mtu = raw_mtu if isinstance(raw_mtu, int) and raw_mtu > 0 else 1500
+        self.deadline = (
+            time.monotonic() + self.cfg.duration
+            if self.cfg.duration > 0
+            else None
+        )
 
         try:
             workers = [
                 threading.Thread(
                     target=self._client_loop,
-                    args=(identity, dest_pool, writer),
+                    args=(identity, dest_pool, writer, idx, mtu),
                     daemon=True,
                     name=f"client-{idx}",
                 )
@@ -98,34 +107,62 @@ class Simulator:
                 worker.start()
 
             try:
-                for worker in workers:
-                    worker.join(timeout=60)  # Add timeout to prevent infinite hang
-                    if worker.is_alive():
-                        print(f"Warning: Worker thread {worker.name} did not exit cleanly", file=sys.stderr)
+                while any(worker.is_alive() for worker in workers):
+                    if self._duration_expired():
+                        self.stop_event.set()
+                        break
+                    time.sleep(0.01)
             except KeyboardInterrupt:
                 self.stop_event.set()
-                for worker in workers:
-                    worker.join(timeout=5)  # Shorter timeout on interrupt
-                    if worker.is_alive():
-                        print(f"Warning: Worker thread {worker.name} still running after interrupt", file=sys.stderr)
         finally:
             self.stop_event.set()
+            shutdown_deadline = time.monotonic() + 5.0
+            for worker in locals().get("workers", []):
+                remaining = max(0.0, shutdown_deadline - time.monotonic())
+                worker.join(timeout=remaining)
+                if worker.is_alive():
+                    print(f"Warning: Worker thread {worker.name} did not exit cleanly", file=sys.stderr)
+            if "reporter" in locals():
+                reporter.join(timeout=1.0)
             if created_writer and writer:
                 writer.close()
 
         return self.stats
 
-    def _client_loop(self, identity: Identity, dest_pool: Union[List[str], ipaddress._BaseNetwork], pcap_writer: Optional[PcapWriter]) -> None:
+    def _client_loop(
+        self,
+        identity: Identity,
+        dest_pool: Union[List[str], ipaddress._BaseNetwork],
+        pcap_writer: Optional[PcapWriter],
+        client_index: int = 0,
+        mtu: int = 1500,
+    ) -> None:
         count_limit = self.cfg.count if self.cfg.count > 0 else None
         sends = 0
         while not self.stop_event.is_set():
+            if self._duration_expired():
+                self.stop_event.set()
+                break
             dest_ip = _choose_dest_ip(self.cfg, dest_pool)
             chosen_identity = (
                 random.choice(self.identities) if self.cfg.rand_source else identity
             )
             dest_mac = self._resolve_dest_mac(dest_ip)
             try:
-                frames = build_frames(self.cfg, chosen_identity, dest_ip, dest_mac)
+                if self.cfg.beast:
+                    profile = build_beast_profile(
+                        self.cfg.ip_version,
+                        mtu,
+                        sends,
+                        client_index,
+                        sport=self.cfg.sport,
+                        dport=self.cfg.dport,
+                    )
+                    frames = build_frames(
+                        self.cfg, chosen_identity, dest_ip, dest_mac, profile=profile
+                    )
+                else:
+                    frames = build_frames(self.cfg, chosen_identity, dest_ip, dest_mac)
             except (ValueError, OSError, AttributeError) as e:
                 self.stats.bump_error()
                 if self.cfg.verbose:
@@ -143,7 +180,8 @@ class Simulator:
             for frame in frames:
                 try:
                     if pcap_writer:
-                        pcap_writer.write(frame)
+                        with self.writer_lock:
+                            pcap_writer.write(frame)
                     sendp(frame, iface=self.cfg.interface, verbose=0)
                     self.stats.bump_sent()
                 except (OSError, PermissionError) as e:
@@ -156,6 +194,9 @@ class Simulator:
                 break
             if not self.cfg.flood:
                 time.sleep(max(self.cfg.interval, 0.0))
+
+    def _duration_expired(self) -> bool:
+        return self.deadline is not None and time.monotonic() >= self.deadline
 
     def _resolve_dest_mac(self, dest_ip: str) -> str:
         """

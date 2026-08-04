@@ -29,6 +29,8 @@ class RuntimeConfig:
     data_size: Optional[int] = None
     payload_hex: bool = False
     flood: bool = False
+    beast: bool = False
+    duration: float = 0.0
     rand_source: bool = False
     rand_dest: bool = False
     ttl: int = 64
@@ -90,6 +92,28 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
     if not data.get("dst") and not data.get("dest_subnet"):
         raise ValueError("Provide dst or dest_subnet to target traffic")
 
+    clients = _as_int(data.get("clients"), default=1)
+    if clients <= 0:
+        raise ValueError("clients must be a positive integer")
+
+    duration = _as_float(data.get("duration"), default=0.0)
+    if duration < 0:
+        raise ValueError("time must be zero or a positive number of seconds")
+
+    beast = bool(data.get("beast", False))
+    if beast:
+        conflicts = [
+            key for key in ("proto", "payload", "data_size", "frag")
+            if key in data and data.get(key) not in (None, False, "")
+        ]
+        if conflicts:
+            rendered = ", ".join(f"--{key.replace('_', '-')}" for key in conflicts)
+            raise ValueError(f"Beast mode controls packet profiles; remove: {rendered}")
+
+    count = _as_int(data.get("count"), default=0 if beast else 1)
+    if count < 0:
+        raise ValueError("count must be zero or a positive integer")
+
     # Validate ports
     dport = _maybe_int(data.get("dport"))
     if dport is not None and not (0 <= dport <= 65535):
@@ -131,7 +155,7 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
     return RuntimeConfig(
         interface=data["interface"],
         dst=str(data.get("dst", "") or ""),
-        clients=_as_int(data.get("clients"), default=1),
+        clients=clients,
         subnet_pool=data.get("subnet_pool"),
         dest_subnet=data.get("dest_subnet"),
         ip_version=ip_version,
@@ -140,11 +164,13 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
         proto=proto,
         flags=flags,
         interval=_as_float(data.get("interval"), default=0.1),
-        count=_as_int(data.get("count"), default=1),
+        count=count,
         payload=data.get("payload"),
         data_size=data_size,
         payload_hex=bool(data.get("payload_hex", False)),
         flood=bool(data.get("flood", False)),
+        beast=beast,
+        duration=duration,
         rand_source=bool(data.get("rand_source", False)),
         rand_dest=bool(data.get("rand_dest", False)),
         ttl=_as_int(data.get("ttl"), default=64),
@@ -190,6 +216,8 @@ def _known_keys() -> set:
         "data_size",
         "payload_hex",
         "flood",
+        "beast",
+        "duration",
         "rand_source",
         "rand_dest",
         "ttl",

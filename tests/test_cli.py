@@ -15,6 +15,21 @@ class TestParseArgs:
         assert args.interface == "eth0"
         assert args.dst == "10.0.0.1"
 
+    def test_parse_args_beast_mode_aliases(self):
+        """Requested singular-client and faster spellings map to existing fields."""
+        args = _parse_args([
+            "--interface", "eth0",
+            "--client", "100",
+            "--dst", "192.168.1.1",
+            "--beast",
+            "--faster",
+            "--time", "12.5",
+        ])
+        assert args.clients == 100
+        assert args.beast is True
+        assert args.flood is True
+        assert args.duration == 12.5
+
     def test_parse_args_all_options(self):
         """Test parsing all available arguments."""
         argv = [

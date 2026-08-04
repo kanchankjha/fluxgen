@@ -121,6 +121,80 @@ class TestSimulator:
 
     @patch("fluxgen.sender.get_interface_info")
     @patch("fluxgen.sender.generate_identities")
+    @patch("fluxgen.sender.build_frames")
+    @patch("fluxgen.sender.sendp")
+    @patch("fluxgen.sender.getmacbyip")
+    def test_beast_mode_rotates_profiles(
+        self, mock_getmac, mock_sendp, mock_build, mock_gen_id, mock_iface, mock_sleep
+    ):
+        mock_iface.return_value = Mock(
+            address=ipaddress.ip_interface("192.168.1.10/24"),
+            mac="02:00:00:aa:bb:cc",
+            gateway=None,
+            mtu=1500,
+        )
+        mock_gen_id.return_value = [
+            Mock(ip=ipaddress.IPv4Address("192.168.1.100"), mac="02:00:00:aa:bb:01")
+        ]
+        mock_getmac.return_value = "aa:bb:cc:dd:ee:ff"
+        mock_build.return_value = [MagicMock()]
+
+        cfg = RuntimeConfig(
+            interface="eth0",
+            dst="10.0.0.5",
+            beast=True,
+            clients=1,
+            count=8,
+            flood=True,
+            quiet=True,
+        )
+        stats = Simulator(cfg).run()
+
+        profiles = [call.kwargs["profile"] for call in mock_build.call_args_list]
+        assert [profile.proto for profile in profiles] == [
+            "tcp", "udp", "icmp", "sctp", "gre", "esp", "ah", "igmp"
+        ]
+        assert [profile.target_frame_size for profile in profiles] == list(range(60, 68))
+        assert stats.sent == 8
+
+    @patch("fluxgen.sender.get_interface_info")
+    @patch("fluxgen.sender.generate_identities")
+    @patch("fluxgen.sender.build_frames")
+    @patch("fluxgen.sender.sendp")
+    @patch("fluxgen.sender.getmacbyip")
+    def test_duration_stops_an_unlimited_run(
+        self, mock_getmac, mock_sendp, mock_build, mock_gen_id, mock_iface, mock_sleep
+    ):
+        mock_iface.return_value = Mock(
+            address=ipaddress.ip_interface("192.168.1.10/24"),
+            mac="02:00:00:aa:bb:cc",
+            gateway=None,
+            mtu=1500,
+        )
+        mock_gen_id.return_value = [
+            Mock(ip=ipaddress.IPv4Address("192.168.1.100"), mac="02:00:00:aa:bb:01")
+        ]
+        mock_getmac.return_value = "aa:bb:cc:dd:ee:ff"
+        mock_build.return_value = [MagicMock()]
+        cfg = RuntimeConfig(
+            interface="eth0",
+            dst="10.0.0.5",
+            count=0,
+            duration=0.01,
+            flood=True,
+            quiet=True,
+        )
+        sim = Simulator(cfg)
+
+        started = time.monotonic()
+        stats = sim.run()
+
+        assert time.monotonic() - started < 1.0
+        assert stats.sent > 0
+        assert sim.stop_event.is_set()
+
+    @patch("fluxgen.sender.get_interface_info")
+    @patch("fluxgen.sender.generate_identities")
     @patch("fluxgen.sender.sendp")
     @patch("fluxgen.sender.getmacbyip")
     def test_simulator_dry_run(self, mock_getmac, mock_sendp, mock_gen_id, mock_iface, mock_sleep):

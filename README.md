@@ -13,6 +13,7 @@
 - **Custom payloads** - Send text or hex-encoded data
 - **Traffic capture** - Export sent traffic to PCAP files
 - **Load testing** - Flood mode for maximum throughput
+- **Beast mode** - Continuously rotate protocols, ports, flags, and MTU-sized traffic profiles
 - **Configuration files** - YAML/JSON configuration support
 
 ## Installation
@@ -255,6 +256,27 @@ pcap_out: load_test.pcap
 fluxgen --config config.yaml
 ```
 
+### 8. Beast Mode
+
+Generate a continuous mix of TCP, UDP, ICMP, SCTP, GRE, ESP, AH, and (for
+IPv4) IGMP traffic. Packet sizes sweep from the valid minimum Ethernet frame
+size through the selected interface's MTU and then repeat. Each simulated
+client starts at a different point in the sequence.
+
+```bash
+# Run until Ctrl-C, sending without an interval
+fluxgen --interface eth0 --client 100 --dst 192.168.1.1 --beast --faster
+
+# Stop all clients after 60 seconds
+fluxgen --interface eth0 --client 100 --dst 192.168.1.1 --beast --faster --time 60
+```
+
+`--client` is an alias for `--clients`, and `--faster` is an alias for
+`--flood`. A missing `--time` or a value of `0` runs until interrupted. Beast
+mode controls the protocol and payload profile, so it cannot be combined with
+`--proto`, `--payload`, `--data-size`, or `--frag`. Explicit source and
+destination ports remain supported as overrides.
+
 ## Usage
 
 ```bash
@@ -269,6 +291,7 @@ Key flags:
 - `--frag --frag-size 500 --frag-mode random` enable fragmentation with fixed or randomized fragment sizes
 - `--ip-version 4|6|auto` force IPv4/IPv6 or let fluxgen infer from destinations
 - `--flood` remove delay, `--dry-run` craft packets only, `--pcap-out out.pcap` write sent frames
+- `--beast` continuously vary supported protocols and packet sizes; add `--time SECONDS` for a bounded run
 
 ### Common Use Cases
 
@@ -405,7 +428,9 @@ fluxgen --interface eth0 --clients 100 --dst 10.0.0.5 --dport 80 \
 #### Traffic Control
 - `--count N` - Packets to send per client (0 = infinite, default: 0)
 - `--interval SECONDS` - Delay between packets (default: 0.1 seconds)
-- `--flood` - Remove delay between packets (maximum speed)
+- `--flood`, `--faster` - Remove delay between packets (maximum speed)
+- `--beast` - Rotate supported protocols, ports, flags, TTL/TOS, and packet sizes
+- `--time SECONDS` - Global runtime; missing or 0 means run until interrupted
 
 #### Output and Debugging
 - `--pcap-out PATH` - Write sent packets to PCAP file

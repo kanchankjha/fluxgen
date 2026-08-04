@@ -11,8 +11,9 @@ from fluxgen.netinfo import InterfaceInfo, get_interface_info, _default_gateway
 class TestGetInterfaceInfo:
     """Test interface information retrieval."""
 
+    @patch("psutil.net_if_stats")
     @patch("psutil.net_if_addrs")
-    def test_get_interface_info_basic(self, mock_net_if_addrs):
+    def test_get_interface_info_basic(self, mock_net_if_addrs, mock_net_if_stats):
         """Test retrieving basic interface information."""
         # Mock interface addresses
         mock_addr_ipv4 = Mock()
@@ -27,6 +28,7 @@ class TestGetInterfaceInfo:
         mock_net_if_addrs.return_value = {
             "eth0": [mock_addr_ipv4, mock_addr_mac]
         }
+        mock_net_if_stats.return_value = {"eth0": Mock(mtu=9000)}
 
         with patch("fluxgen.netinfo._default_gateway", return_value="192.168.1.1"):
             info = get_interface_info("eth0", ip_version=4)
@@ -36,6 +38,7 @@ class TestGetInterfaceInfo:
         assert info.address.network == ipaddress.IPv4Network("192.168.1.0/24")
         assert info.mac == "02:00:00:aa:bb:cc"
         assert info.gateway == "192.168.1.1"
+        assert info.mtu == 9000
 
     @patch("psutil.net_if_addrs")
     def test_get_interface_info_not_found(self, mock_net_if_addrs):

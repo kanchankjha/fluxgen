@@ -18,6 +18,7 @@ class InterfaceInfo:
     address: ipaddress._BaseInterface
     mac: str
     gateway: Optional[str]
+    mtu: int = 1500
 
 
 def get_interface_info(name: str, ip_version: int = 4) -> InterfaceInfo:
@@ -55,7 +56,9 @@ def get_interface_info(name: str, ip_version: int = 4) -> InterfaceInfo:
         raise ValueError(f"Interface {name} does not have a MAC address")
 
     gateway = _default_gateway(name, ip_version)
-    return InterfaceInfo(name=name, address=chosen_addr, mac=mac_addr, gateway=gateway)
+    stats = psutil.net_if_stats().get(name)
+    mtu = stats.mtu if stats and stats.mtu > 0 else 1500
+    return InterfaceInfo(name=name, address=chosen_addr, mac=mac_addr, gateway=gateway, mtu=mtu)
 
 
 def _default_gateway(iface: str, ip_version: int = 4) -> Optional[str]:

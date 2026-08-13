@@ -5,7 +5,7 @@ import socket
 from unittest.mock import MagicMock, Mock, patch
 import pytest
 import psutil
-from fluxgen.netinfo import InterfaceInfo, get_interface_info, _default_gateway
+from fluxgen.netinfo import InterfaceInfo, get_interface_info, _default_gateway, _ipv6_prefix_length
 
 
 class TestGetInterfaceInfo:
@@ -146,8 +146,38 @@ class TestGetInterfaceInfo:
             info = get_interface_info("eth0", ip_version=6)
 
         assert info.address.ip == ipaddress.IPv6Address("2001:db8::1")
+        assert info.address.network == ipaddress.IPv6Network("2001:db8::/64")
         assert info.mac == "02:00:00:aa:bb:cc"
         assert info.gateway == "2001:db8::fffe"
+
+    def test_ipv6_prefix_length_formats(self):
+        """Parse the formats psutil returns across supported platforms."""
+        assert _ipv6_prefix_length("ffff:ffff:ffff:ffff::") == 64
+        assert _ipv6_prefix_length("ffff:ffff:ffff:ffff::%en0") == 64
+        assert _ipv6_prefix_length("64") == 64
+        assert _ipv6_prefix_length("/64") == 64
+
+    @patch("psutil.net_if_addrs")
+    def test_get_interface_info_ipv6_with_prefix_in_address(self, mock_net_if_addrs):
+        """Support systems that expose the prefix as part of the IPv6 address."""
+        mock_addr_ipv6 = Mock()
+        mock_addr_ipv6.family = socket.AF_INET6
+        mock_addr_ipv6.address = "2607:f598:b11e:1f4a:250:56ff:fe86:b13b/64"
+        mock_addr_ipv6.netmask = None
+
+        mock_addr_mac = Mock()
+        mock_addr_mac.family = psutil.AF_LINK
+        mock_addr_mac.address = "02:00:00:aa:bb:cc"
+
+        mock_net_if_addrs.return_value = {
+            "eth0": [mock_addr_ipv6, mock_addr_mac]
+        }
+
+        with patch("fluxgen.netinfo._default_gateway", return_value=None):
+            info = get_interface_info("eth0", ip_version=6)
+
+        assert info.address.ip == ipaddress.IPv6Address("2607:f598:b11e:1f4a:250:56ff:fe86:b13b")
+        assert info.address.network == ipaddress.IPv6Network("2607:f598:b11e:1f4a::/64")
 
     @patch("psutil.net_if_addrs")
     def test_get_interface_info_no_ipv6(self, mock_net_if_addrs):

@@ -40,8 +40,8 @@ def get_interface_info(name: str, ip_version: int = 4) -> InterfaceInfo:
             addr_no_scope = addr.address.split("%")[0]
             if addr.netmask:
                 try:
-                    network = ipaddress.IPv6Network((addr_no_scope, addr.netmask), strict=False)
-                    ipv6_addr = ipaddress.ip_interface(f"{addr_no_scope}/{network.prefixlen}")
+                    prefixlen = _ipv6_prefix_length(addr.netmask)
+                    ipv6_addr = ipaddress.ip_interface(f"{addr_no_scope}/{prefixlen}")
                 except ValueError:
                     ipv6_addr = ipaddress.ip_interface(addr_no_scope)
             else:
@@ -59,6 +59,26 @@ def get_interface_info(name: str, ip_version: int = 4) -> InterfaceInfo:
     stats = psutil.net_if_stats().get(name)
     mtu = stats.mtu if stats and stats.mtu > 0 else 1500
     return InterfaceInfo(name=name, address=chosen_addr, mac=mac_addr, gateway=gateway, mtu=mtu)
+
+
+def _ipv6_prefix_length(netmask: str) -> int:
+    """Return a prefix length for psutil's platform-dependent IPv6 netmask."""
+    value = str(netmask).split("%", 1)[0].strip()
+    if value.startswith("/"):
+        value = value[1:]
+
+    if value.isdigit():
+        prefixlen = int(value)
+        if 0 <= prefixlen <= 128:
+            return prefixlen
+        raise ValueError(f"Invalid IPv6 prefix length: {netmask}")
+
+    mask = int(ipaddress.IPv6Address(value))
+    prefixlen = mask.bit_count()
+    expected = ((1 << prefixlen) - 1) << (128 - prefixlen) if prefixlen else 0
+    if mask != expected:
+        raise ValueError(f"Non-contiguous IPv6 netmask: {netmask}")
+    return prefixlen
 
 
 def _default_gateway(iface: str, ip_version: int = 4) -> Optional[str]:

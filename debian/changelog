@@ -1,3 +1,10 @@
+fluxgen (1.1.0-1) unstable; urgency=medium
+
+  * Add Beast traffic mode.
+  * Fix IPv6 interface prefix detection across Linux formats.
+
+ -- Kanchan Kumar Jha <kanchankjha@gmail.com>  Thu, 13 Aug 2026 00:00:00 +0530
+
 fluxgen (0.1.1-1) unstable; urgency=medium
 
   * Release 0.1.1:

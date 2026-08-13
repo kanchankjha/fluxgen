@@ -1,5 +1,5 @@
 Name:           fluxgen
-Version:        0.1.0
+Version:        1.1.0
 Release:        1%{?dist}
 Summary:        Multi-client traffic generator inspired by hping3
 
@@ -40,5 +40,9 @@ addresses from the same subnet.
 %doc README.md
 
 %changelog
+* Thu Aug 13 2026 Kanchan Kumar Jha <kanchankjha@gmail.com> - 1.1.0-1
+- Add Beast traffic mode
+- Fix IPv6 interface prefix detection across Linux formats
+
 * Fri Feb 13 2026 Kanchan Kumar Jha <kanchankjha@gmail.com> - 0.1.0-1
 - Initial RPM package

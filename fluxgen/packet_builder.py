@@ -11,6 +11,7 @@ from typing import List, Optional
 
 from scapy.all import (  # type: ignore
     AH,
+    ARP,
     ESP,
     GRE,
     Ether,
@@ -23,20 +24,37 @@ from scapy.all import (  # type: ignore
     UDP,
     RandShort,
     Raw,
+    Padding,
     fragment,
     fragment6,
 )
+from scapy.layers.vrrp import VRRP, VRRPv3  # type: ignore
 try:
     from scapy.contrib.igmp import IGMP  # type: ignore
 except ImportError:
     from scapy.all import IGMP  # type: ignore
+try:
+    from scapy.contrib.ospf import (  # type: ignore
+        OSPF_Hdr,
+        OSPF_Hello,
+        OSPFv3_Hdr,
+        OSPFv3_Hello,
+    )
+except ImportError:  # pragma: no cover - Scapy ships this contrib module
+    OSPF_Hdr = OSPF_Hello = OSPFv3_Hdr = OSPFv3_Hello = None  # type: ignore
 
 from .config import RuntimeConfig
+from .fuzzer import fuzz_frame
 from .identity import Identity
 
 
-BEAST_PROTOCOLS_IPV4 = ("tcp", "udp", "icmp", "sctp", "gre", "esp", "ah", "igmp")
-BEAST_PROTOCOLS_IPV6 = ("tcp", "udp", "icmp", "sctp", "gre", "esp", "ah")
+BEAST_PROTOCOLS_IPV4 = (
+    "tcp", "udp", "icmp", "sctp", "gre", "esp", "ah", "igmp",
+    "arp", "vrrp", "ospf",
+)
+BEAST_PROTOCOLS_IPV6 = (
+    "tcp", "udp", "icmp", "sctp", "gre", "esp", "ah", "vrrp", "ospf",
+)
 BEAST_TCP_FLAGS = ("S", "A", "F", "R", "P", "U", "SA", "PA", "FA")
 
 
@@ -96,6 +114,7 @@ def build_frames(
     dest_ip: str,
     dest_mac: str,
     profile: Optional[PacketProfile] = None,
+    fuzz_rng: Optional[random.Random] = None,
 ) -> List:
     """
     Build one or more Ethernet frames for a single send.
@@ -120,6 +139,18 @@ def build_frames(
     flags = profile.flags if profile else cfg.flags
     icmp_type = profile.icmp_type if profile else cfg.icmp_type
     icmp_code = profile.icmp_code if profile else cfg.icmp_code
+
+    if proto == "arp":
+        if cfg.ip_version == 6:
+            raise ValueError("ARP is only supported for IPv4")
+        base_pkt = Ether(src=identity.mac, dst="ff:ff:ff:ff:ff:ff") / ARP(
+            op=1,
+            hwsrc=identity.mac,
+            psrc=str(identity.ip),
+            hwdst="00:00:00:00:00:00",
+            pdst=dest_ip,
+        )
+        return _finish_frames(cfg, [base_pkt], profile, proto, fuzz_rng)
 
     if cfg.ip_version == 6:
         ip_layer = IPv6(
@@ -193,6 +224,22 @@ def build_frames(
         if payload:
             transport = transport / SCTPChunkData(data=payload.load)
             payload = None  # Already added to SCTP
+    elif proto == "vrrp":
+        if cfg.ip_version == 6:
+            transport = VRRPv3(addrlist=[str(identity.ip)])
+        else:
+            transport = VRRP(addrlist=[str(identity.ip)])
+    elif proto == "ospf":
+        if OSPF_Hdr is None:
+            raise ValueError("OSPF support is unavailable in this Scapy installation")
+        if cfg.ip_version == 6:
+            transport = OSPFv3_Hdr(src="1.1.1.1")
+            if not profile:
+                transport = transport / OSPFv3_Hello()
+        else:
+            transport = OSPF_Hdr(src=str(identity.ip))
+            if not profile:
+                transport = transport / OSPF_Hello()
     else:
         raise ValueError(f"Unsupported protocol: {proto}")
 
@@ -201,16 +248,7 @@ def build_frames(
     if payload:
         base_pkt = base_pkt / payload
 
-    if profile:
-        if len(base_pkt) > profile.target_frame_size:
-            raise ValueError(
-                f"Target frame size {profile.target_frame_size} is below the "
-                f"{proto} minimum of {len(base_pkt)} bytes"
-            )
-        padding_size = profile.target_frame_size - len(base_pkt)
-        if padding_size:
-            base_pkt = base_pkt / Raw(load=os.urandom(padding_size))
-
+    frames = [base_pkt]
     if cfg.frag:
         # Default fragment size is 1480 bytes (typical 1500 MTU - 20 IP header)
         fragsize = cfg.frag_size or 1480
@@ -218,11 +256,47 @@ def build_frames(
             lower = max(8, fragsize // 2)
             fragsize = random.randint(lower, fragsize)
         if cfg.ip_version == 6:
-            fragments = fragment6(base_pkt[IPv6], fragsize=fragsize)
-            return [ether / frag for frag in fragments]
-        fragments = fragment(base_pkt[IP], fragsize=fragsize)
-        return [ether / frag for frag in fragments]
-    return [base_pkt]
+            # fragment6 uses the positional/camel-case ``fragSize`` argument,
+            # unlike IPv4's fragment(..., fragsize=...).
+            fragments = fragment6(base_pkt[IPv6], fragsize)
+            frames = [ether / frag for frag in fragments]
+        else:
+            fragments = fragment(base_pkt[IP], fragsize=fragsize)
+            frames = [ether / frag for frag in fragments]
+    return _finish_frames(cfg, frames, profile, proto, fuzz_rng)
+
+
+def _finish_frames(
+    cfg: RuntimeConfig,
+    frames: List,
+    profile: Optional[PacketProfile],
+    proto: str,
+    fuzz_rng: Optional[random.Random],
+) -> List:
+    """Apply beast sizing and append fuzzed copies after normal frames."""
+    finished = []
+    for frame in frames:
+        if profile:
+            if len(frame) > profile.target_frame_size:
+                raise ValueError(
+                    f"Target frame size {profile.target_frame_size} is below the "
+                    f"{proto} minimum of {len(frame)} bytes"
+                )
+            padding_size = profile.target_frame_size - len(frame)
+            if padding_size:
+                # Padding is serialized after protocol layers (not consumed as
+                # part of VRRP authentication data like a Raw payload can be).
+                frame = frame / Padding(load=os.urandom(padding_size))
+        finished.append(frame)
+        if cfg.fuzz:
+            mutated = frame.copy()
+            fuzz_frame(
+                mutated,
+                fuzz_rng or random.Random(),
+                mutations_per_header=cfg.fuzz_mutations,
+            )
+            finished.append(mutated)
+    return finished
 
 
 def _build_payload(cfg: RuntimeConfig) -> Raw | None:

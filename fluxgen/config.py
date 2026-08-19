@@ -30,6 +30,9 @@ class RuntimeConfig:
     payload_hex: bool = False
     flood: bool = False
     beast: bool = False
+    fuzz: bool = False
+    fuzz_seed: Optional[int] = None
+    fuzz_mutations: int = 1
     duration: float = 0.0
     rand_source: bool = False
     rand_dest: bool = False
@@ -137,11 +140,25 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
 
     # Validate protocol
     proto = str(data.get("proto", "tcp") or "tcp").lower()
-    valid_protocols = {"tcp", "udp", "icmp", "igmp", "gre", "esp", "ah", "sctp"}
+    valid_protocols = {
+        "tcp", "udp", "icmp", "igmp", "gre", "esp", "ah", "sctp",
+        "arp", "vrrp", "ospf",
+    }
     if proto not in valid_protocols:
         raise ValueError(f"Invalid protocol: {proto} (must be one of {', '.join(sorted(valid_protocols))})")
 
     ip_version = _resolve_ip_version(data)
+    if ip_version == 6 and proto in {"arp", "igmp"}:
+        raise ValueError(f"{proto.upper()} is only supported for IPv4")
+
+    raw_fuzz_mutations = data.get("fuzz_mutations")
+    fuzz_mutations = 1 if raw_fuzz_mutations is None else _maybe_int(raw_fuzz_mutations)
+    if fuzz_mutations is None or fuzz_mutations <= 0:
+        raise ValueError("fuzz_mutations must be a positive integer")
+    raw_fuzz_seed = data.get("fuzz_seed")
+    fuzz_seed = None if raw_fuzz_seed is None else _maybe_int(raw_fuzz_seed)
+    if raw_fuzz_seed is not None and fuzz_seed is None:
+        raise ValueError("fuzz_seed must be an integer")
 
     data_size = _maybe_int(data.get("data_size"))
     if data_size is not None and data_size <= 0:
@@ -170,6 +187,9 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
         payload_hex=bool(data.get("payload_hex", False)),
         flood=bool(data.get("flood", False)),
         beast=beast,
+        fuzz=bool(data.get("fuzz", False)),
+        fuzz_seed=fuzz_seed,
+        fuzz_mutations=fuzz_mutations,
         duration=duration,
         rand_source=bool(data.get("rand_source", False)),
         rand_dest=bool(data.get("rand_dest", False)),
@@ -217,6 +237,9 @@ def _known_keys() -> set:
         "payload_hex",
         "flood",
         "beast",
+        "fuzz",
+        "fuzz_seed",
+        "fuzz_mutations",
         "duration",
         "rand_source",
         "rand_dest",

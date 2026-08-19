@@ -7,7 +7,8 @@
 ## Features
 
 - **Multi-client simulation** - Simulate hundreds of clients from a single host
-- **Protocol support** - TCP, UDP, ICMP, IGMP, GRE, ESP, AH, SCTP
+- **Protocol support** - TCP, UDP, ICMP, IGMP, GRE, ESP, AH, SCTP, ARP, VRRP, OSPF
+- **Header fuzzing** - Emit each normal packet together with a structure-aware fuzzed copy
 - **Spoofed identities** - Unique IP/MAC addresses per simulated client
 - **Flexible traffic patterns** - Randomize sources, destinations, ports
 - **Custom payloads** - Send text or hex-encoded data
@@ -258,8 +259,8 @@ fluxgen --config config.yaml
 
 ### 8. Beast Mode
 
-Generate a continuous mix of TCP, UDP, ICMP, SCTP, GRE, ESP, AH, and (for
-IPv4) IGMP traffic. Packet sizes sweep from the valid minimum Ethernet frame
+Generate a continuous mix of all supported protocols (excluding IPv4-only ARP
+and IGMP on IPv6). Packet sizes sweep from the valid minimum Ethernet frame
 size through the selected interface's MTU and then repeat. Each simulated
 client starts at a different point in the sequence.
 
@@ -277,6 +278,27 @@ mode controls the protocol and payload profile, so it cannot be combined with
 `--proto`, `--payload`, `--data-size`, or `--frag`. Explicit source and
 destination ports remain supported as overrides.
 
+### 9. Normal Traffic with Fuzzed Header Copies
+
+`--fuzz` emits the normal packet first and then a same-size copy with mutations
+on every applicable IP and protocol-header layer. Destination MAC/IP fields and
+destination ports are preserved so both variants reach the same DUT. Boundary
+values and explicitly malformed lengths/checksums are used where supported.
+
+```bash
+# Each logical send produces one normal TCP frame and one fuzzed copy
+fluxgen --interface eth0 --dst 10.0.0.5 --proto tcp --dport 443 \
+    --count 100 --fuzz --fuzz-seed 42
+
+# Apply three mutations to every applicable header layer
+fluxgen --interface eth0 --dst 10.0.0.5 --beast --fuzz \
+    --fuzz-mutations 3 --time 30 --faster --pcap-out fuzz.pcap
+```
+
+`--count` counts logical sends, so fuzz mode normally emits twice that number
+of frames. Fragmented traffic emits a normal/fuzzed pair for each fragment.
+`--fuzz-seed` makes each client's mutation sequence reproducible.
+
 ## Usage
 
 ```bash
@@ -292,6 +314,7 @@ Key flags:
 - `--ip-version 4|6|auto` force IPv4/IPv6 or let fluxgen infer from destinations
 - `--flood` remove delay, `--dry-run` craft packets only, `--pcap-out out.pcap` write sent frames
 - `--beast` continuously vary supported protocols and packet sizes; add `--time SECONDS` for a bounded run
+- `--fuzz [--fuzz-seed N] [--fuzz-mutations N]` emit normal packets plus fuzzed header copies
 
 ### Common Use Cases
 
@@ -403,7 +426,7 @@ fluxgen --interface eth0 --clients 100 --dst 10.0.0.5 --dport 80 \
 - `--rand-dest` - Randomize destination IP per packet (uses `--dest-subnet` if provided)
 
 #### Protocol Settings
-- `--proto {tcp,udp,icmp,igmp,gre,esp,ah,sctp}` - Transport/network protocol (default: tcp)
+- `--proto {tcp,udp,icmp,igmp,gre,esp,ah,sctp,arp,vrrp,ospf}` - Protocol (default: tcp)
 
 #### TCP/UDP/SCTP Options
 - `--dport N` - Destination port (1-65535)
@@ -430,6 +453,9 @@ fluxgen --interface eth0 --clients 100 --dst 10.0.0.5 --dport 80 \
 - `--interval SECONDS` - Delay between packets (default: 0.1 seconds)
 - `--flood`, `--faster` - Remove delay between packets (maximum speed)
 - `--beast` - Rotate supported protocols, ports, flags, TTL/TOS, and packet sizes
+- `--fuzz` - Emit every normal frame followed by a fuzzed header copy
+- `--fuzz-seed N` - Seed the per-client header mutation sequence
+- `--fuzz-mutations N` - Mutations per applicable header layer (default: 1)
 - `--time SECONDS` - Global runtime; missing or 0 means run until interrupted
 
 #### Output and Debugging
@@ -501,6 +527,25 @@ fluxgen --interface eth0 --dst target --dport 5060 --proto sctp
 ```
 
 ### Layer 3 Protocols
+
+#### ARP (Address Resolution Protocol, IPv4 only)
+- Broadcast ARP requests using each simulated client's IP/MAC identity
+- Fuzz ARP operation and target-hardware fields while preserving the target IP
+```bash
+fluxgen --interface eth0 --dst 192.168.1.1 --proto arp --fuzz
+```
+
+#### VRRP (Virtual Router Redundancy Protocol)
+- VRRPv2 over IPv4 and VRRPv3 over IPv6
+```bash
+fluxgen --interface eth0 --dst 224.0.0.18 --proto vrrp
+```
+
+#### OSPF (Open Shortest Path First)
+- OSPFv2 Hello packets over IPv4 and OSPFv3 Hello packets over IPv6
+```bash
+fluxgen --interface eth0 --dst 224.0.0.5 --proto ospf
+```
 
 #### ICMP (Internet Control Message Protocol)
 - Echo requests (ping)

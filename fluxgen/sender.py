@@ -108,10 +108,14 @@ class Simulator:
 
             try:
                 while any(worker.is_alive() for worker in workers):
+                    # Give newly-started workers a chance to emit before a
+                    # short duration expires, and avoid coupling orchestration
+                    # polling to the per-packet sleep function.
+                    if self.stop_event.wait(timeout=0.01):
+                        break
                     if self._duration_expired():
                         self.stop_event.set()
                         break
-                    time.sleep(0.01)
             except KeyboardInterrupt:
                 self.stop_event.set()
         finally:
@@ -139,6 +143,9 @@ class Simulator:
     ) -> None:
         count_limit = self.cfg.count if self.cfg.count > 0 else None
         sends = 0
+        fuzz_rng = random.Random(
+            None if self.cfg.fuzz_seed is None else self.cfg.fuzz_seed + client_index
+        )
         while not self.stop_event.is_set():
             if self._duration_expired():
                 self.stop_event.set()
@@ -147,8 +154,8 @@ class Simulator:
             chosen_identity = (
                 random.choice(self.identities) if self.cfg.rand_source else identity
             )
-            dest_mac = self._resolve_dest_mac(dest_ip)
             try:
+                profile = None
                 if self.cfg.beast:
                     profile = build_beast_profile(
                         self.cfg.ip_version,
@@ -158,11 +165,29 @@ class Simulator:
                         sport=self.cfg.sport,
                         dport=self.cfg.dport,
                     )
+                wire_proto = profile.proto if profile else self.cfg.proto
+                dest_mac = (
+                    "ff:ff:ff:ff:ff:ff"
+                    if wire_proto == "arp"
+                    else self._resolve_dest_mac(dest_ip)
+                )
+                if profile:
                     frames = build_frames(
-                        self.cfg, chosen_identity, dest_ip, dest_mac, profile=profile
+                        self.cfg,
+                        chosen_identity,
+                        dest_ip,
+                        dest_mac,
+                        profile=profile,
+                        fuzz_rng=fuzz_rng,
                     )
                 else:
-                    frames = build_frames(self.cfg, chosen_identity, dest_ip, dest_mac)
+                    frames = build_frames(
+                        self.cfg,
+                        chosen_identity,
+                        dest_ip,
+                        dest_mac,
+                        fuzz_rng=fuzz_rng,
+                    )
             except (ValueError, OSError, AttributeError) as e:
                 self.stats.bump_error()
                 if self.cfg.verbose:

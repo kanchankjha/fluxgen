@@ -68,7 +68,7 @@ class TestParseArgs:
 
     def test_parse_args_protocol_choices(self):
         """Test all protocol choices are accepted."""
-        protocols = ["tcp", "udp", "icmp", "igmp", "gre", "esp", "ah", "sctp"]
+        protocols = ["tcp", "udp", "icmp", "igmp", "gre", "esp", "ah", "sctp", "arp", "vrrp", "ospf"]
         for proto in protocols:
             args = _parse_args(["--interface", "eth0", "--dst", "10.0.0.1", "--proto", proto])
             assert args.proto == proto
@@ -152,6 +152,18 @@ class TestParseArgs:
         assert args.frag is True
         assert args.frag_size == 500
         assert args.frag_mode == "fixed"
+
+    def test_parse_args_fuzz_options(self):
+        args = _parse_args([
+            "--interface", "eth0",
+            "--dst", "10.0.0.1",
+            "--fuzz",
+            "--fuzz-seed", "42",
+            "--fuzz-mutations", "3",
+        ])
+        assert args.fuzz is True
+        assert args.fuzz_seed == 42
+        assert args.fuzz_mutations == 3
 
 
 class TestMain:

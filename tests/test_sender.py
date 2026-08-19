@@ -903,3 +903,77 @@ class TestSimulator:
         assert mock_sleep.call_count == 2  # count-1 times
         mock_sleep.assert_called_with(0.5)
         assert stats.sent == 3
+
+    @patch("fluxgen.sender.get_interface_info")
+    @patch("fluxgen.sender.generate_identities")
+    @patch("fluxgen.sender.build_frames")
+    @patch("fluxgen.sender.sendp")
+    @patch("fluxgen.sender.getmacbyip")
+    def test_fuzz_sends_normal_and_mutated_frames_per_logical_send(
+        self, mock_getmac, mock_sendp, mock_build, mock_gen_id, mock_iface, mock_sleep
+    ):
+        mock_iface.return_value = Mock(
+            address=ipaddress.ip_interface("192.168.1.10/24"),
+            mac="02:00:00:aa:bb:cc",
+            gateway=None,
+        )
+        mock_gen_id.return_value = [
+            Mock(ip=ipaddress.IPv4Address("192.168.1.100"), mac="02:00:00:aa:bb:01")
+        ]
+        mock_getmac.return_value = "aa:bb:cc:dd:ee:ff"
+        mock_build.return_value = [MagicMock(name="normal"), MagicMock(name="fuzzed")]
+        cfg = RuntimeConfig(
+            interface="eth0",
+            dst="10.0.0.5",
+            count=2,
+            flood=True,
+            quiet=True,
+            fuzz=True,
+            fuzz_seed=100,
+        )
+
+        writer = MagicMock()
+        stats = Simulator(cfg).run(pcap_writer=writer)
+
+        assert stats.sent == 4
+        assert mock_sendp.call_count == 4
+        assert writer.write.call_count == 4
+        assert [call.args[0] for call in writer.write.call_args_list] == [
+            mock_build.return_value[0], mock_build.return_value[1],
+            mock_build.return_value[0], mock_build.return_value[1],
+        ]
+        assert mock_build.call_count == 2
+        first_rng = mock_build.call_args_list[0].kwargs["fuzz_rng"]
+        second_rng = mock_build.call_args_list[1].kwargs["fuzz_rng"]
+        assert first_rng is second_rng
+
+    @patch("fluxgen.sender.get_interface_info")
+    @patch("fluxgen.sender.generate_identities")
+    @patch("fluxgen.sender.build_frames")
+    @patch("fluxgen.sender.sendp")
+    @patch("fluxgen.sender.getmacbyip")
+    def test_arp_uses_broadcast_without_mac_resolution(
+        self, mock_getmac, mock_sendp, mock_build, mock_gen_id, mock_iface, mock_sleep
+    ):
+        mock_iface.return_value = Mock(
+            address=ipaddress.ip_interface("192.168.1.10/24"),
+            mac="02:00:00:aa:bb:cc",
+            gateway=None,
+        )
+        mock_gen_id.return_value = [
+            Mock(ip=ipaddress.IPv4Address("192.168.1.100"), mac="02:00:00:aa:bb:01")
+        ]
+        mock_build.return_value = [MagicMock()]
+        cfg = RuntimeConfig(
+            interface="eth0",
+            dst="192.168.1.20",
+            proto="arp",
+            count=1,
+            flood=True,
+            quiet=True,
+        )
+
+        Simulator(cfg).run()
+
+        mock_getmac.assert_not_called()
+        assert mock_build.call_args.args[3] == "ff:ff:ff:ff:ff:ff"

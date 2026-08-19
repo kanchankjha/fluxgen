@@ -209,7 +209,7 @@ class TestBuildRuntimeConfig:
 
     def test_all_protocols(self):
         """Test all supported protocols."""
-        protocols = ["tcp", "udp", "icmp", "igmp", "gre", "esp", "ah", "sctp"]
+        protocols = ["tcp", "udp", "icmp", "igmp", "gre", "esp", "ah", "sctp", "arp", "vrrp", "ospf"]
         for proto in protocols:
             data = {"interface": "eth0", "dst": "10.0.0.1", "proto": proto}
             cfg = build_runtime_config(data)
@@ -219,6 +219,47 @@ class TestBuildRuntimeConfig:
         """Test invalid protocol raises error."""
         data = {"interface": "eth0", "dst": "10.0.0.1", "proto": "invalid"}
         with pytest.raises(ValueError, match="Invalid protocol"):
+            build_runtime_config(data)
+
+    def test_fuzz_options(self):
+        cfg = build_runtime_config({
+            "interface": "eth0",
+            "dst": "10.0.0.1",
+            "fuzz": True,
+            "fuzz_seed": 42,
+            "fuzz_mutations": 3,
+        })
+        assert cfg.fuzz is True
+        assert cfg.fuzz_seed == 42
+        assert cfg.fuzz_mutations == 3
+        assert not cfg.extra
+
+    @pytest.mark.parametrize("value", (0, -1, "invalid"))
+    def test_fuzz_mutations_must_be_positive(self, value):
+        data = {
+            "interface": "eth0",
+            "dst": "10.0.0.1",
+            "fuzz_mutations": value,
+        }
+        with pytest.raises(ValueError, match="fuzz_mutations"):
+            build_runtime_config(data)
+
+    def test_fuzz_seed_must_be_an_integer(self):
+        with pytest.raises(ValueError, match="fuzz_seed"):
+            build_runtime_config({
+                "interface": "eth0",
+                "dst": "10.0.0.1",
+                "fuzz_seed": "invalid",
+            })
+
+    @pytest.mark.parametrize("proto", ("arp", "igmp"))
+    def test_ipv4_only_protocols_reject_ipv6(self, proto):
+        data = {
+            "interface": "eth0",
+            "dst": "2001:db8::1",
+            "proto": proto,
+        }
+        with pytest.raises(ValueError, match="only supported for IPv4"):
             build_runtime_config(data)
 
     def test_port_validation(self):

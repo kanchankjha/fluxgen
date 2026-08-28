@@ -36,6 +36,7 @@ class TestParseArgs:
             "--interface", "eth0",
             "--dst", "10.0.0.5",
             "--clients", "10",
+            "--client-start-index", "21",
             "--proto", "tcp",
             "--dport", "80",
             "--sport", "12345",
@@ -53,6 +54,7 @@ class TestParseArgs:
         assert args.interface == "eth0"
         assert args.dst == "10.0.0.5"
         assert args.clients == 10
+        assert args.client_start_index == 21
         assert args.proto == "tcp"
         assert args.dport == 80
         assert args.sport == 12345

@@ -763,6 +763,32 @@ class TestSimulator:
         # Verify custom subnet was used
         assert used_network == ipaddress.ip_network("10.0.0.0/24")
 
+    @patch("fluxgen.sender.get_interface_info")
+    @patch("fluxgen.sender.generate_identities")
+    def test_simulator_passes_client_start_index(self, mock_gen_id, mock_iface, mock_sleep):
+        mock_iface.return_value = Mock(
+            address=ipaddress.ip_interface("192.168.1.1/24"),
+            mac="02:00:00:aa:bb:cc",
+            gateway=None,
+        )
+        mock_gen_id.return_value = [
+            Mock(ip=ipaddress.IPv4Address("192.168.1.21"), mac="02:00:00:aa:bb:01")
+        ]
+
+        cfg = RuntimeConfig(
+            interface="eth0",
+            dst="10.0.0.5",
+            clients=1,
+            client_start_index=21,
+            count=1,
+            dry_run=True,
+            quiet=True,
+        )
+
+        Simulator(cfg).run()
+
+        assert mock_gen_id.call_args.kwargs["start_index"] == 21
+
     def test_simulator_report_loop_with_output(self, capsys):
         """Test report loop prints stats periodically."""
         cfg = RuntimeConfig(interface="eth0", dst="10.0.0.1", quiet=False)

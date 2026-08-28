@@ -48,6 +48,7 @@ class RuntimeConfig:
     pcap_out: Optional[str] = None
     verbose: bool = False
     quiet: bool = False
+    client_start_index: Optional[int] = None
     extra: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -98,6 +99,17 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
     clients = _as_int(data.get("clients"), default=1)
     if clients <= 0:
         raise ValueError("clients must be a positive integer")
+
+    raw_client_start_index = data.get("client_start_index")
+    client_start_index = (
+        None
+        if raw_client_start_index is None
+        else _maybe_int(raw_client_start_index)
+    )
+    if raw_client_start_index is not None and client_start_index is None:
+        raise ValueError("client_start_index must be an integer")
+    if client_start_index is not None and client_start_index <= 0:
+        raise ValueError("client_start_index must be a positive integer")
 
     duration = _as_float(data.get("duration"), default=0.0)
     if duration < 0:
@@ -173,6 +185,7 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
         interface=data["interface"],
         dst=str(data.get("dst", "") or ""),
         clients=clients,
+        client_start_index=client_start_index,
         subnet_pool=data.get("subnet_pool"),
         dest_subnet=data.get("dest_subnet"),
         ip_version=ip_version,
@@ -223,6 +236,7 @@ def _known_keys() -> set:
         "interface",
         "dst",
         "clients",
+        "client_start_index",
         "subnet_pool",
         "dest_subnet",
         "ip_version",

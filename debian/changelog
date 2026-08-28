@@ -1,3 +1,9 @@
+fluxgen (1.1.2-1) unstable; urgency=medium
+
+  * Add configurable starting index for simulated client IP allocation.
+
+ -- Kanchan Kumar Jha <kanchankjha@gmail.com>  Fri, 28 Aug 2026 13:09:50 +0530
+
 fluxgen (1.1.1-1) unstable; urgency=medium
 
   * Add paired normal and structure-aware fuzzed packet headers.

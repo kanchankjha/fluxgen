@@ -38,6 +38,14 @@ def _parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
     parser.add_argument("--dst", help="Destination IP address (required unless using dest_subnet)")
     parser.add_argument("--dest-subnet", help="CIDR to randomize destination addresses")
     parser.add_argument("--clients", "--client", dest="clients", type=int, default=None, help="Number of simulated clients")
+    parser.add_argument(
+        "--client-start-index",
+        dest="client_start_index",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Starting host index for client IPs within the client subnet (for example, 21 -> 192.168.1.21)",
+    )
     parser.add_argument("--subnet-pool", help="CIDR pool for client IPs (defaults to interface subnet)")
     parser.add_argument("--ip-version", choices=["4", "6", "auto"], default=None, help="Force IPv4, IPv6, or auto-detect")
     parser.add_argument("--dport", type=int, help="Destination port for TCP/UDP/SCTP")

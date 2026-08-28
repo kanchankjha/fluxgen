@@ -21,6 +21,7 @@ class TestRuntimeConfig:
         assert cfg.interface == "eth0"
         assert cfg.dst == "10.0.0.1"
         assert cfg.clients == 1
+        assert cfg.client_start_index is None
         assert cfg.proto == "tcp"
         assert cfg.flags == "S"
         assert cfg.ttl == 64
@@ -187,6 +188,23 @@ class TestBuildRuntimeConfig:
         assert cfg.clients == 1
         assert cfg.proto == "tcp"
         assert cfg.ip_version == 4
+
+    def test_client_start_index(self):
+        cfg = build_runtime_config({
+            "interface": "eth0",
+            "dst": "10.0.0.1",
+            "client_start_index": 21,
+        })
+        assert cfg.client_start_index == 21
+
+    @pytest.mark.parametrize("value", [0, -1, "invalid"])
+    def test_invalid_client_start_index(self, value):
+        with pytest.raises(ValueError, match="client_start_index"):
+            build_runtime_config({
+                "interface": "eth0",
+                "dst": "10.0.0.1",
+                "client_start_index": value,
+            })
 
     def test_missing_interface(self):
         """Test building config without interface raises error."""

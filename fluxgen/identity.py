@@ -21,19 +21,49 @@ def generate_identities(
     network: ipaddress._BaseNetwork,
     exclude_ips: Iterable[str],
     base_mac: Optional[str] = None,
+    start_index: Optional[int] = None,
 ) -> List[Identity]:
+    if start_index is not None and start_index <= 0:
+        raise ValueError("client_start_index must be a positive integer")
+
     excluded: Set[str] = {str(ip) for ip in exclude_ips}
     identities: List[Identity] = []
     if network.version == 4:
-        hosts = [ip for ip in network.hosts() if str(ip) not in excluded]
+        hosts = [
+            ip
+            for ip in network.hosts()
+            if (start_index is None or _host_index(network, ip) >= start_index)
+            and str(ip) not in excluded
+        ]
         if len(hosts) < count:
+            if start_index is not None:
+                raise ValueError(
+                    f"Not enough usable IPs in {network} from client_start_index "
+                    f"{start_index} to allocate {count} clients"
+                )
             raise ValueError(f"Not enough usable IPs in {network} to allocate {count} clients")
         source_hosts = hosts
     else:
-        available = network.num_addresses - len(excluded)
-        if available < count:
-            raise ValueError(f"Not enough usable IPs in {network} to allocate {count} clients")
-        source_hosts = None  # Will generate randomly for IPv6
+        if start_index is not None:
+            source_hosts = []
+            for offset in range(start_index, network.num_addresses):
+                candidate = ipaddress.IPv6Address(
+                    int(network.network_address) + offset
+                )
+                if str(candidate) not in excluded:
+                    source_hosts.append(candidate)
+                    if len(source_hosts) == count:
+                        break
+            if len(source_hosts) < count:
+                raise ValueError(
+                    f"Not enough usable IPs in {network} from client_start_index "
+                    f"{start_index} to allocate {count} clients"
+                )
+        else:
+            available = network.num_addresses - len(excluded)
+            if available < count:
+                raise ValueError(f"Not enough usable IPs in {network} to allocate {count} clients")
+            source_hosts = None  # Will generate randomly for IPv6
 
     mac_seed = _mac_seed(base_mac)
     for idx in range(count):
@@ -44,6 +74,14 @@ def generate_identities(
         mac = _mac_from_seed(mac_seed, idx)
         identities.append(Identity(ip=ip, mac=mac))
     return identities
+
+
+def _host_index(
+    network: ipaddress._BaseNetwork,
+    address: ipaddress._BaseAddress,
+) -> int:
+    """Return an address's zero-based offset from the network address."""
+    return int(address) - int(network.network_address)
 
 
 def _mac_seed(base_mac: Optional[str]) -> List[int]:

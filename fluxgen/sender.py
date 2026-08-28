@@ -65,12 +65,15 @@ class Simulator:
         if iface_info.gateway:
             excludes.append(iface_info.gateway)
 
-        self.identities = generate_identities(
-            count=self.cfg.clients,
-            network=network,
-            exclude_ips=excludes,
-            base_mac=iface_info.mac,
-        )
+        identity_kwargs = {
+            "count": self.cfg.clients,
+            "network": network,
+            "exclude_ips": excludes,
+            "base_mac": iface_info.mac,
+        }
+        if self.cfg.client_start_index is not None:
+            identity_kwargs["start_index"] = self.cfg.client_start_index
+        self.identities = generate_identities(**identity_kwargs)
 
         dest_pool = _build_dest_pool(self.cfg)
         if not dest_pool:

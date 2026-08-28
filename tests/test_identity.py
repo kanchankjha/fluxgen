@@ -108,6 +108,60 @@ class TestGenerateIdentities:
             assert isinstance(identity.mac, str)
             assert len(identity.mac.split(":")) == 6
 
+    def test_generate_identities_with_start_index(self):
+        network = ipaddress.ip_network("192.168.1.0/24")
+
+        identities = generate_identities(
+            count=3,
+            network=network,
+            exclude_ips=["192.168.1.1"],
+            start_index=21,
+        )
+
+        assert [str(identity.ip) for identity in identities] == [
+            "192.168.1.21",
+            "192.168.1.22",
+            "192.168.1.23",
+        ]
+
+    def test_generate_identities_start_index_skips_excluded_addresses(self):
+        network = ipaddress.ip_network("192.168.1.0/24")
+
+        identities = generate_identities(
+            count=2,
+            network=network,
+            exclude_ips=["192.168.1.21"],
+            start_index=21,
+        )
+
+        assert [str(identity.ip) for identity in identities] == [
+            "192.168.1.22",
+            "192.168.1.23",
+        ]
+
+    @pytest.mark.parametrize("start_index", [0, 256])
+    def test_generate_identities_invalid_start_index(self, start_index):
+        network = ipaddress.ip_network("192.168.1.0/24")
+
+        with pytest.raises(ValueError, match="client_start_index"):
+            generate_identities(
+                count=1,
+                network=network,
+                exclude_ips=[],
+                start_index=start_index,
+            )
+
+    def test_generate_identities_start_index_insufficient_ips(self):
+        network = ipaddress.ip_network("192.168.1.0/24")
+
+        with pytest.raises(ValueError, match="client_start_index"):
+            generate_identities(
+                count=2,
+                network=network,
+                exclude_ips=[],
+                start_index=254,
+            )
+
     def test_generate_identities_with_base_mac(self):
         """Test generating identities with custom base MAC."""
         network = ipaddress.ip_network("10.0.0.0/28")

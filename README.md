@@ -418,6 +418,7 @@ fluxgen --interface eth0 --clients 100 --dst 10.0.0.5 --dport 80 \
 
 #### Client Simulation
 - `--clients N` - Number of simulated clients with unique IPs/MACs (default: 1)
+- `--client-start-index N` - Start client IP allocation at host index `N` within the client subnet (for example, `21` gives `192.168.1.21` in `192.168.1.0/24`)
 - `--subnet-pool CIDR` - IP range for client addresses (default: interface subnet)
 - `--rand-source` - Randomize source identity for each packet
 

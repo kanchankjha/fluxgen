@@ -44,6 +44,7 @@ except ImportError:  # pragma: no cover - Scapy ships this contrib module
     OSPF_Hdr = OSPF_Hello = OSPFv3_Hdr = OSPFv3_Hello = None  # type: ignore
 
 from .config import RuntimeConfig
+from .applications import ApplicationProfile, build_application_payload
 from .fuzzer import fuzz_frame
 from .identity import Identity
 
@@ -115,6 +116,9 @@ def build_frames(
     dest_mac: str,
     profile: Optional[PacketProfile] = None,
     fuzz_rng: Optional[random.Random] = None,
+    application_profile: Optional[ApplicationProfile] = None,
+    application_index: int = 0,
+    client_index: int = 0,
 ) -> List:
     """
     Build one or more Ethernet frames for a single send.
@@ -131,12 +135,27 @@ def build_frames(
     Returns:
         List of Scapy frame objects ready to send
     """
-    proto = profile.proto if profile else cfg.proto
+    if profile and application_profile:
+        raise ValueError("Beast and application profiles cannot be combined")
+    application_flow = (
+        application_profile.flow_for(application_index)
+        if application_profile
+        else None
+    )
+    proto = (
+        profile.proto
+        if profile
+        else application_flow.transport
+        if application_flow
+        else cfg.proto
+    )
     ttl = profile.ttl if profile else cfg.ttl
     tos = profile.tos if profile else cfg.tos
     sport = profile.sport if profile else cfg.sport
     dport = profile.dport if profile else cfg.dport
-    flags = profile.flags if profile else cfg.flags
+    if application_flow and dport is None:
+        dport = application_flow.port_for(application_index)
+    flags = profile.flags if profile else application_flow.tcp_flags if application_flow else cfg.flags
     icmp_type = profile.icmp_type if profile else cfg.icmp_type
     icmp_code = profile.icmp_code if profile else cfg.icmp_code
 
@@ -169,7 +188,17 @@ def build_frames(
         if cfg.ip_id is not None:
             ip_layer.id = cfg.ip_id
 
-    payload = None if profile else _build_payload(cfg)
+    if application_profile and application_flow:
+        payload = Raw(
+            load=build_application_payload(
+                application_profile,
+                application_flow,
+                client_index,
+                application_index,
+            )
+        )
+    else:
+        payload = None if profile else _build_payload(cfg)
 
     if proto == "tcp":
         transport = TCP(

@@ -1,5 +1,5 @@
 Name:           fluxgen
-Version:        1.1.2
+Version:        1.2.0
 Release:        1%{?dist}
 Summary:        Multi-client traffic generator inspired by hping3
 
@@ -40,6 +40,9 @@ addresses from the same subnet.
 %doc README.md
 
 %changelog
+* Wed Sep 02 2026 Kanchan Kumar Jha <kanchankjha@gmail.com> - 1.2.0-1
+- Add 100 application-shaped traffic profiles and application selection
+
 * Fri Aug 28 2026 Kanchan Kumar Jha <kanchankjha@gmail.com> - 1.1.2-1
 - Add configurable starting index for simulated client IP allocation
 

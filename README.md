@@ -243,10 +243,8 @@ Use YAML configuration for complex scenarios:
 # config.yaml
 interface: eth0
 clients: 100
+application: webex,outlook,iot
 dst: 192.168.1.50
-dport: 80
-proto: tcp
-flags: S
 count: 1000
 interval: 0.001
 rand_source: true
@@ -419,8 +417,43 @@ fluxgen --interface eth0 --clients 100 --dst 10.0.0.5 --dport 80 \
 #### Client Simulation
 - `--clients N` - Number of simulated clients with unique IPs/MACs (default: 1)
 - `--client-start-index N` - Start client IP allocation at host index `N` within the client subnet (for example, `21` gives `192.168.1.21` in `192.168.1.0/24`)
+- `--application NAME[,NAME...]` - Generate application-shaped traffic using one or more built-in profiles, or use `all` to cycle through the full catalog
 - `--subnet-pool CIDR` - IP range for client addresses (default: interface subnet)
 - `--rand-source` - Randomize source identity for each packet
+
+Application profiles control the default transport, destination ports, payload
+sizes, and traffic shape. They generate synthetic L7-shaped frames rather than
+real authenticated application sessions. Application profiles cannot be
+combined with `--proto`, `--flags`, `--payload`, `--data-size`, or `--beast`; explicit
+`--dport` and `--sport` overrides remain supported.
+
+The built-in catalog contains 100 profiles:
+
+| Category | Profiles |
+| --- | --- |
+| Collaboration | `webex`, `zoom`, `microsoft-teams`, `google-meet`, `slack`, `discord`, `mattermost`, `rocket-chat`, `zulip`, `jabber` |
+| Productivity | `outlook`, `gmail`, `exchange-online`, `sharepoint`, `onedrive`, `google-drive`, `dropbox`, `box`, `confluence`, `notion` |
+| Web/business | `web-browsing`, `https-saas`, `rest-api`, `graphql-api`, `webhooks`, `e-commerce`, `salesforce`, `servicenow`, `jira`, `sap` |
+| Voice/media | `voice`, `video`, `live-video`, `video-on-demand`, `music-streaming`, `podcast`, `webinar`, `screen-sharing`, `telemedicine`, `online-classroom` |
+| Network services | `dns`, `dns-over-https`, `dns-over-tls`, `ntp`, `dhcp`, `ldap`, `kerberos`, `radius`, `tacacs-plus`, `snmp` |
+| IoT/OT | `iot`, `mqtt`, `mqtt-tls`, `coap`, `lwm2m`, `modbus-tcp`, `opc-ua`, `bacnet-ip`, `smart-meter`, `sensor-telemetry` |
+| Development/cloud | `git-https`, `git-ssh`, `container-registry`, `kubernetes-api`, `cloud-object-storage`, `ci-cd`, `artifact-repository`, `package-manager`, `terraform-api`, `serverless-invocation` |
+| Data/database | `data`, `postgresql`, `mysql`, `mssql`, `oracle-db`, `redis`, `mongodb`, `elasticsearch`, `kafka`, `amqp` |
+| Security/remote | `ipsec-vpn`, `ssl-vpn`, `ssh`, `rdp`, `vnc`, `winrm`, `syslog`, `siem-ingestion`, `edr-telemetry`, `vulnerability-scanner` |
+| Consumer/edge | `online-gaming`, `game-voice-chat`, `p2p-file-sharing`, `software-update`, `backup-sync`, `smart-tv`, `social-media`, `ads-analytics`, `video-surveillance`, `digital-signage` |
+
+Examples:
+
+```bash
+# One application profile
+fluxgen --interface eth0 --clients 100 --application webex --dst 10.0.0.5 --count 1000
+
+# Rotate through a selected mix
+fluxgen --interface eth0 --clients 100 --application webex,outlook,iot --dst 10.0.0.5 --count 1000
+
+# Cycle through all 100 profiles
+fluxgen --interface eth0 --clients 100 --application all --dst 10.0.0.5 --count 1000
+```
 
 #### Destination Options
 - `--dest-subnet CIDR` - IP range for random destination addresses
@@ -756,6 +789,7 @@ fluxgen/
 ├── fluxgen/               # Main package directory
 │   ├── __init__.py      # Package initialization
 │   ├── __main__.py      # Entry point for `python -m fluxgen`
+│   ├── applications.py  # Declarative application traffic profiles
 │   ├── cli.py           # Command-line interface and argument parsing
 │   ├── config.py        # Configuration file loading (YAML/JSON)
 │   ├── identity.py      # Client identity generation (IP/MAC)
@@ -763,6 +797,7 @@ fluxgen/
 │   ├── packet_builder.py # Packet crafting with Scapy
 │   └── sender.py        # Multi-client orchestration and sending
 ├── tests/               # Unit tests
+│   ├── test_applications.py # Application profile tests
 │   ├── test_cli.py      # CLI argument parsing tests
 │   ├── test_config.py   # Configuration file tests
 │   ├── test_identity.py # Client identity tests
@@ -776,6 +811,7 @@ fluxgen/
 
 ### Key Modules
 
+- **applications.py**: Defines the 100 built-in application-shaped traffic profiles
 - **cli.py**: Parses command-line arguments, validates inputs, and orchestrates execution
 - **identity.py**: Generates unique client identities (source IPs, MACs) within subnet constraints
 - **netinfo.py**: Queries system network interfaces using `psutil` and `netifaces`

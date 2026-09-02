@@ -130,6 +130,15 @@ class TestParseArgs:
         assert args.subnet_pool == "192.168.1.0/24"
         assert args.dest_subnet == "10.0.0.0/24"
 
+    def test_parse_args_application_profiles(self):
+        args = _parse_args([
+            "--interface", "eth0",
+            "--dst", "10.0.0.1",
+            "--application", "webex,outlook",
+            "--application", "iot",
+        ])
+        assert args.application == ["webex,outlook", "iot"]
+
     def test_parse_args_icmp_options(self):
         """Test ICMP-related arguments."""
         args = _parse_args([

@@ -16,6 +16,7 @@ from scapy.all import PcapWriter, sendp  # type: ignore
 from scapy.layers.l2 import getmacbyip  # type: ignore
 from scapy.layers.inet6 import getmacbyip6  # type: ignore
 
+from .applications import select_application_profile
 from .config import RuntimeConfig
 from .identity import Identity, generate_identities
 from .netinfo import get_interface_info
@@ -159,6 +160,11 @@ class Simulator:
             )
             try:
                 profile = None
+                application_profile = select_application_profile(
+                    self.cfg.application,
+                    client_index,
+                    sends,
+                )
                 if self.cfg.beast:
                     profile = build_beast_profile(
                         self.cfg.ip_version,
@@ -168,7 +174,18 @@ class Simulator:
                         sport=self.cfg.sport,
                         dport=self.cfg.dport,
                     )
-                wire_proto = profile.proto if profile else self.cfg.proto
+                application_flow = (
+                    application_profile.flow_for(sends)
+                    if application_profile
+                    else None
+                )
+                wire_proto = (
+                    profile.proto
+                    if profile
+                    else application_flow.transport
+                    if application_flow
+                    else self.cfg.proto
+                )
                 dest_mac = (
                     "ff:ff:ff:ff:ff:ff"
                     if wire_proto == "arp"
@@ -182,6 +199,9 @@ class Simulator:
                         dest_mac,
                         profile=profile,
                         fuzz_rng=fuzz_rng,
+                        application_profile=application_profile,
+                        application_index=sends,
+                        client_index=client_index,
                     )
                 else:
                     frames = build_frames(
@@ -190,6 +210,9 @@ class Simulator:
                         dest_ip,
                         dest_mac,
                         fuzz_rng=fuzz_rng,
+                        application_profile=application_profile,
+                        application_index=sends,
+                        client_index=client_index,
                     )
             except (ValueError, OSError, AttributeError) as e:
                 self.stats.bump_error()

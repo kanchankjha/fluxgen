@@ -8,7 +8,9 @@ import json
 import pathlib
 import ipaddress
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
+
+from .applications import normalize_application_names
 
 
 @dataclass
@@ -49,6 +51,7 @@ class RuntimeConfig:
     verbose: bool = False
     quiet: bool = False
     client_start_index: Optional[int] = None
+    application: Tuple[str, ...] = ()
     extra: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -110,6 +113,16 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
         raise ValueError("client_start_index must be an integer")
     if client_start_index is not None and client_start_index <= 0:
         raise ValueError("client_start_index must be a positive integer")
+
+    application = normalize_application_names(data.get("application"))
+    if application:
+        conflicts = [
+            key for key in ("proto", "flags", "payload", "data_size", "beast")
+            if key in data and data.get(key) not in (None, False, "")
+        ]
+        if conflicts:
+            rendered = ", ".join(f"--{key.replace('_', '-')}" for key in conflicts)
+            raise ValueError(f"Application profiles control packet profiles; remove: {rendered}")
 
     duration = _as_float(data.get("duration"), default=0.0)
     if duration < 0:
@@ -219,6 +232,7 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
         verbose=bool(data.get("verbose", False)),
         quiet=bool(data.get("quiet", False)),
         extra={k: v for k, v in data.items() if k not in _known_keys()},
+        application=application,
     )
 
 
@@ -237,6 +251,7 @@ def _known_keys() -> set:
         "dst",
         "clients",
         "client_start_index",
+        "application",
         "subnet_pool",
         "dest_subnet",
         "ip_version",

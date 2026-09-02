@@ -789,6 +789,38 @@ class TestSimulator:
 
         assert mock_gen_id.call_args.kwargs["start_index"] == 21
 
+    @patch("fluxgen.sender.get_interface_info")
+    @patch("fluxgen.sender.generate_identities")
+    @patch("fluxgen.sender.build_frames")
+    @patch("fluxgen.sender.sendp")
+    @patch("fluxgen.sender.getmacbyip")
+    def test_simulator_selects_application_profile(
+        self, mock_getmac, mock_sendp, mock_build, mock_gen_id, mock_iface, mock_sleep
+    ):
+        mock_iface.return_value = Mock(
+            address=ipaddress.ip_interface("192.168.1.10/24"),
+            mac="02:00:00:aa:bb:cc",
+            gateway=None,
+        )
+        mock_gen_id.return_value = [
+            Mock(ip=ipaddress.IPv4Address("192.168.1.100"), mac="02:00:00:aa:bb:01")
+        ]
+        mock_getmac.return_value = "aa:bb:cc:dd:ee:ff"
+        mock_build.return_value = [MagicMock()]
+
+        cfg = RuntimeConfig(
+            interface="eth0",
+            dst="10.0.0.5",
+            application=("webex",),
+            count=1,
+            quiet=True,
+        )
+        stats = Simulator(cfg).run()
+
+        assert stats.sent == 1
+        assert mock_build.call_args.kwargs["application_profile"].name == "webex"
+        assert mock_build.call_args.kwargs["application_index"] == 0
+
     def test_simulator_report_loop_with_output(self, capsys):
         """Test report loop prints stats periodically."""
         cfg = RuntimeConfig(interface="eth0", dst="10.0.0.1", quiet=False)

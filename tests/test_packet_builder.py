@@ -4,6 +4,7 @@ import ipaddress
 import pytest
 from scapy.all import Ether, IP, TCP, UDP, ICMP, Raw
 from fluxgen.config import RuntimeConfig
+from fluxgen.applications import APPLICATION_PROFILES
 from fluxgen.identity import Identity
 import fluxgen.packet_builder as packet_builder
 from fluxgen.packet_builder import (
@@ -78,6 +79,66 @@ class TestBuildFrames:
         assert frame.haslayer(UDP)
         assert frame[UDP].sport == 54321
         assert frame[UDP].dport == 53
+
+    def test_build_application_frame_uses_profile_flow_and_payload(self, test_identity):
+        cfg = RuntimeConfig(interface="eth0", dst="10.0.0.5")
+        profile = APPLICATION_PROFILES["outlook"]
+
+        frames = build_frames(
+            cfg,
+            test_identity,
+            "10.0.0.5",
+            "aa:bb:cc:dd:ee:ff",
+            application_profile=profile,
+            application_index=0,
+            client_index=1,
+        )
+
+        frame = frames[0]
+        assert frame.haslayer(TCP)
+        assert frame[TCP].dport == 443
+        assert frame[TCP].flags == "PA"
+        assert frame.haslayer(Raw)
+        assert b"fluxgen/outlook/" in frame[Raw].load
+
+    def test_build_application_frame_rotates_mixed_flows(self, test_identity):
+        cfg = RuntimeConfig(interface="eth0", dst="10.0.0.5")
+        profile = APPLICATION_PROFILES["webex"]
+
+        first = build_frames(
+            cfg, test_identity, "10.0.0.5", "aa:bb:cc:dd:ee:ff",
+            application_profile=profile, application_index=0,
+        )[0]
+        second = build_frames(
+            cfg, test_identity, "10.0.0.5", "aa:bb:cc:dd:ee:ff",
+            application_profile=profile, application_index=2,
+        )[0]
+
+        assert first.haslayer(TCP)
+        assert second.haslayer(UDP)
+
+    def test_build_application_frame_honors_explicit_destination_port(self, test_identity):
+        cfg = RuntimeConfig(interface="eth0", dst="10.0.0.5", dport=9999)
+        profile = APPLICATION_PROFILES["webex"]
+
+        frame = build_frames(
+            cfg, test_identity, "10.0.0.5", "aa:bb:cc:dd:ee:ff",
+            application_profile=profile,
+        )[0]
+
+        assert frame[TCP].dport == 9999
+
+    def test_beast_and_application_profiles_are_rejected(self, test_identity):
+        cfg = RuntimeConfig(interface="eth0", dst="10.0.0.5", beast=True)
+        with pytest.raises(ValueError, match="cannot be combined"):
+            build_frames(
+                cfg,
+                test_identity,
+                "10.0.0.5",
+                "aa:bb:cc:dd:ee:ff",
+                profile=build_beast_profile(4, 1500, 0),
+                application_profile=APPLICATION_PROFILES["webex"],
+            )
 
     def test_beast_profile_rotates_all_ipv4_protocols_and_exact_sizes(self, test_identity):
         cfg = RuntimeConfig(interface="eth0", dst="10.0.0.5", beast=True)

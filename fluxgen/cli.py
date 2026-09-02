@@ -46,6 +46,13 @@ def _parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
         metavar="N",
         help="Starting host index for client IPs within the client subnet (for example, 21 -> 192.168.1.21)",
     )
+    parser.add_argument(
+        "--application",
+        action="append",
+        default=None,
+        metavar="NAME[,NAME...]",
+        help="Application-shaped traffic profile(s), or all (repeatable/comma-separated)",
+    )
     parser.add_argument("--subnet-pool", help="CIDR pool for client IPs (defaults to interface subnet)")
     parser.add_argument("--ip-version", choices=["4", "6", "auto"], default=None, help="Force IPv4, IPv6, or auto-detect")
     parser.add_argument("--dport", type=int, help="Destination port for TCP/UDP/SCTP")

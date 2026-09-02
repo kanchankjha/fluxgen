@@ -197,6 +197,34 @@ class TestBuildRuntimeConfig:
         })
         assert cfg.client_start_index == 21
 
+    def test_application_profiles(self):
+        cfg = build_runtime_config({
+            "interface": "eth0",
+            "dst": "10.0.0.1",
+            "application": ["webex,outlook", "iot"],
+        })
+        assert cfg.application == ("webex", "outlook", "iot")
+        assert not cfg.extra
+
+    def test_application_all(self):
+        cfg = build_runtime_config({
+            "interface": "eth0",
+            "dst": "10.0.0.1",
+            "application": "all",
+        })
+        assert cfg.application == ("all",)
+
+    @pytest.mark.parametrize("key", ["proto", "flags", "payload", "data_size", "beast"])
+    def test_application_rejects_conflicting_packet_profile_options(self, key):
+        data = {
+            "interface": "eth0",
+            "dst": "10.0.0.1",
+            "application": "webex",
+            key: True if key in {"beast", "data_size"} else "tcp" if key == "proto" else "data",
+        }
+        with pytest.raises(ValueError, match="Application profiles control"):
+            build_runtime_config(data)
+
     @pytest.mark.parametrize("value", [0, -1, "invalid"])
     def test_invalid_client_start_index(self, value):
         with pytest.raises(ValueError, match="client_start_index"):

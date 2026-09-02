@@ -330,6 +330,64 @@ def build_application_payload(
     return bytes(output[:size])
 
 
+def identify_application_payload(payload: bytes) -> Optional[Tuple[ApplicationProfile, ApplicationFlow]]:
+    """Identify a Fluxgen profile marker embedded in synthetic payload bytes."""
+    if not payload:
+        return None
+    try:
+        marker = payload.split(b"fluxgen/", 1)[1].split(b"/", 2)
+        profile_name = marker[0].decode("ascii")
+        flow_name = marker[1].decode("ascii")
+    except (IndexError, UnicodeDecodeError):
+        return None
+    profile = APPLICATION_PROFILES.get(profile_name)
+    if profile is None:
+        return None
+    for flow in profile.flows:
+        if flow.name == flow_name:
+            return profile, flow
+    return None
+
+
+def select_responder_flow(
+    names: Tuple[str, ...],
+    transport: str,
+    port: int,
+    payload: bytes = b"",
+) -> Optional[Tuple[ApplicationProfile, ApplicationFlow]]:
+    """Select a responder flow using a marker, configured names, or port."""
+    identified = identify_application_payload(payload)
+    allowed = set(APPLICATION_NAMES if names == ("all",) else names)
+    if identified and (not names or identified[0].name in allowed):
+        return identified
+    candidates = APPLICATION_NAMES if names in ((), ("all",)) else names
+    for name in candidates:
+        profile = APPLICATION_PROFILES[name]
+        for flow in profile.flows:
+            if flow.transport == transport and port in flow.ports:
+                return profile, flow
+    return None
+
+
+def build_application_response_payload(
+    profile: ApplicationProfile,
+    flow: ApplicationFlow,
+    request_index: int = 0,
+) -> bytes:
+    """Build deterministic synthetic response bytes for an application flow."""
+    seed = f"response:{profile.name}:{flow.name}:{request_index}".encode("utf-8")
+    digest = hashlib.blake2b(seed, digest_size=32).digest()
+    size = flow.payload_min
+    if flow.payload_max > flow.payload_min:
+        size += int.from_bytes(digest[:4], "big") % (flow.payload_max - flow.payload_min + 1)
+    marker = f"fluxgen-response/{profile.name}/{flow.name}/".encode("utf-8")
+    output = bytearray()
+    while len(output) < size:
+        output.extend(marker)
+        output.extend(digest)
+    return bytes(output[:size])
+
+
 def application_profile_count() -> int:
     """Return the number of built-in application profiles."""
     return len(APPLICATION_PROFILES)

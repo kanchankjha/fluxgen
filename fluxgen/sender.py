@@ -5,6 +5,7 @@ Packet sending orchestration and client simulation.
 from __future__ import annotations
 
 import ipaddress
+import queue
 import random
 import sys
 import threading
@@ -12,7 +13,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Union
 
-from scapy.all import PcapWriter, sendp  # type: ignore
+from scapy.all import AsyncSniffer, ICMP, IP, IPv6, PcapWriter, TCP, UDP, sendp  # type: ignore
+from scapy.layers.inet6 import ICMPv6EchoReply  # type: ignore
 from scapy.layers.l2 import getmacbyip  # type: ignore
 from scapy.layers.inet6 import getmacbyip6  # type: ignore
 
@@ -54,6 +56,9 @@ class Simulator:
         self.writer: Optional[PcapWriter] = None
         self.writer_lock = threading.Lock()
         self.deadline: Optional[float] = None
+        self.response_queues: Dict[tuple, queue.Queue] = {}
+        self.response_lock = threading.Lock()
+        self.response_sniffer = None
 
     def run(self, pcap_writer: Optional[PcapWriter] = None) -> SendStats:
         iface_info = get_interface_info(self.cfg.interface, self.cfg.ip_version)
@@ -95,6 +100,14 @@ class Simulator:
         )
 
         try:
+            if self.cfg.bidirectional:
+                self.response_sniffer = AsyncSniffer(
+                    iface=self.cfg.interface,
+                    filter="ip or ip6",
+                    prn=self._on_response,
+                    store=False,
+                )
+                self.response_sniffer.start()
             workers = [
                 threading.Thread(
                     target=self._client_loop,
@@ -124,6 +137,11 @@ class Simulator:
                 self.stop_event.set()
         finally:
             self.stop_event.set()
+            if self.response_sniffer is not None:
+                try:
+                    self.response_sniffer.stop()
+                except (OSError, RuntimeError):
+                    pass
             shutdown_deadline = time.monotonic() + 5.0
             for worker in locals().get("workers", []):
                 remaining = max(0.0, shutdown_deadline - time.monotonic())
@@ -191,6 +209,25 @@ class Simulator:
                     if wire_proto == "arp"
                     else self._resolve_dest_mac(dest_ip)
                 )
+                if self.cfg.bidirectional and not self.cfg.dry_run:
+                    completed = self._run_bidirectional_transaction(
+                        chosen_identity,
+                        dest_ip,
+                        dest_mac,
+                        application_profile,
+                        application_flow,
+                        sends,
+                        client_index,
+                        pcap_writer,
+                    )
+                    if not completed:
+                        self.stats.bump_error()
+                    sends += 1
+                    if count_limit and sends >= count_limit:
+                        break
+                    if not self.cfg.flood:
+                        time.sleep(max(self.cfg.interval, 0.0))
+                    continue
                 if profile:
                     frames = build_frames(
                         self.cfg,
@@ -245,6 +282,182 @@ class Simulator:
                 break
             if not self.cfg.flood:
                 time.sleep(max(self.cfg.interval, 0.0))
+
+    @staticmethod
+    def _response_key(packet) -> Optional[tuple]:
+        ip_layer = packet.getlayer(IP) or packet.getlayer(IPv6)
+        if ip_layer is None:
+            return None
+        if packet.haslayer(TCP):
+            transport = packet[TCP]
+            return ("tcp", str(ip_layer.src), str(ip_layer.dst), int(transport.sport), int(transport.dport))
+        if packet.haslayer(UDP):
+            transport = packet[UDP]
+            return ("udp", str(ip_layer.src), str(ip_layer.dst), int(transport.sport), int(transport.dport))
+        if packet.haslayer(ICMP) or packet.haslayer(ICMPv6EchoReply):
+            return ("icmp", str(ip_layer.src), str(ip_layer.dst), 0, 0)
+        return None
+
+    def _on_response(self, packet) -> None:
+        key = self._response_key(packet)
+        if key is None:
+            return
+        with self.response_lock:
+            response_queue = self.response_queues.get(key)
+        if response_queue is not None:
+            response_queue.put(packet)
+
+    def _register_response(self, key: tuple) -> queue.Queue:
+        response_queue: queue.Queue = queue.Queue()
+        with self.response_lock:
+            self.response_queues[key] = response_queue
+        return response_queue
+
+    def _unregister_response(self, key: tuple) -> None:
+        with self.response_lock:
+            self.response_queues.pop(key, None)
+
+    def _transmit_frames(self, frames: List, dest_ip: str, pcap_writer: Optional[PcapWriter]) -> None:
+        for frame in frames:
+            try:
+                if pcap_writer:
+                    with self.writer_lock:
+                        pcap_writer.write(frame)
+                sendp(frame, iface=self.cfg.interface, verbose=0)
+                self.stats.bump_sent()
+            except (OSError, PermissionError) as exc:
+                self.stats.bump_error()
+                if self.cfg.verbose:
+                    print(f"Send error for {dest_ip}: {exc}", file=sys.stderr)
+
+    def _run_bidirectional_transaction(
+        self,
+        identity: Identity,
+        dest_ip: str,
+        dest_mac: str,
+        application_profile,
+        application_flow,
+        packet_index: int,
+        client_index: int,
+        pcap_writer: Optional[PcapWriter],
+    ) -> bool:
+        """Run one wire-only transaction against an independent responder."""
+        proto = application_flow.transport if application_flow else self.cfg.proto
+        dport = (
+            application_flow.port_for(packet_index)
+            if application_flow and self.cfg.dport is None
+            else self.cfg.dport
+        )
+        sport = self.cfg.sport or random.randint(1024, 65535)
+        if proto in {"tcp", "udp"} and not dport:
+            if self.cfg.verbose:
+                print("Bidirectional TCP/UDP traffic requires a destination port", file=sys.stderr)
+            return False
+
+        key = (proto, dest_ip, str(identity.ip), int(dport or 0), int(sport or 0))
+        response_queue = self._register_response(key)
+        try:
+            if proto == "tcp":
+                client_seq = random.randint(0, 2**32 - 1)
+                syn = build_frames(
+                    self.cfg,
+                    identity,
+                    dest_ip,
+                    dest_mac,
+                    application_profile=application_profile,
+                    application_index=packet_index,
+                    client_index=client_index,
+                    sport=sport,
+                    dport=dport,
+                    tcp_flags="S",
+                    tcp_seq=client_seq,
+                    tcp_ack=0,
+                    include_application_payload=False,
+                )
+                self._transmit_frames(syn, dest_ip, pcap_writer)
+                syn_ack = self._wait_for_response(response_queue)
+                if syn_ack is None or not syn_ack.haslayer(TCP) or "S" not in str(syn_ack[TCP].flags):
+                    return False
+                server_seq = int(syn_ack[TCP].seq)
+                client_next = client_seq + 1
+                server_next = server_seq + 1
+                request = build_frames(
+                    self.cfg,
+                    identity,
+                    dest_ip,
+                    dest_mac,
+                    application_profile=application_profile,
+                    application_index=packet_index,
+                    client_index=client_index,
+                    sport=sport,
+                    dport=dport,
+                    tcp_flags="PA" if application_profile or self.cfg.payload or self.cfg.data_size else "A",
+                    tcp_seq=client_next,
+                    tcp_ack=server_next,
+                )
+                self._transmit_frames(request, dest_ip, pcap_writer)
+                response = self._wait_for_response(response_queue)
+                if response is not None and response.haslayer(TCP):
+                    response_tcp = response[TCP]
+                    response_len = len(bytes(response_tcp.payload))
+                    if response_len:
+                        server_next = max(server_next, int(response_tcp.seq) + response_len)
+                        ack = build_frames(
+                            self.cfg,
+                            identity,
+                            dest_ip,
+                            dest_mac,
+                            application_index=packet_index,
+                            client_index=client_index,
+                            sport=sport,
+                            dport=dport,
+                            tcp_flags="A",
+                            tcp_seq=client_next,
+                            tcp_ack=server_next,
+                            include_application_payload=False,
+                        )
+                        self._transmit_frames(ack, dest_ip, pcap_writer)
+                fin = build_frames(
+                    self.cfg,
+                    identity,
+                    dest_ip,
+                    dest_mac,
+                    application_index=packet_index,
+                    client_index=client_index,
+                    sport=sport,
+                    dport=dport,
+                    tcp_flags="FA",
+                    tcp_seq=client_next,
+                    tcp_ack=server_next,
+                    include_application_payload=False,
+                )
+                self._transmit_frames(fin, dest_ip, pcap_writer)
+                return response is not None
+
+            frames = build_frames(
+                self.cfg,
+                identity,
+                dest_ip,
+                dest_mac,
+                application_profile=application_profile,
+                application_index=packet_index,
+                client_index=client_index,
+                sport=sport if proto == "udp" else None,
+                dport=dport,
+            )
+            self._transmit_frames(frames, dest_ip, pcap_writer)
+            response = self._wait_for_response(response_queue)
+            return response is not None
+        except (AttributeError, OSError, ValueError):
+            return False
+        finally:
+            self._unregister_response(key)
+
+    def _wait_for_response(self, response_queue: queue.Queue):
+        try:
+            return response_queue.get(timeout=self.cfg.response_timeout)
+        except queue.Empty:
+            return None
 
     def _duration_expired(self) -> bool:
         return self.deadline is not None and time.monotonic() >= self.deadline

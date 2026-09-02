@@ -7,7 +7,7 @@ from __future__ import annotations
 import ipaddress
 import socket
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional
 
 import psutil
 
@@ -22,16 +22,26 @@ class InterfaceInfo:
 
 
 def get_interface_info(name: str, ip_version: int = 4) -> InterfaceInfo:
+    infos = get_interface_infos(name, ip_version=ip_version)
+    return infos[-1]
+
+
+def get_interface_infos(name: str, ip_version: int = 0) -> List[InterfaceInfo]:
+    """Return eligible interface addresses, optionally filtered by family.
+
+    ``ip_version=0`` is used by the independent responder to discover both
+    IPv4 and non-link-local IPv6 addresses from one interface.
+    """
     addrs = psutil.net_if_addrs().get(name)
     if not addrs:
         raise ValueError(f"Interface not found: {name}")
 
-    ipv4_addr = None
-    ipv6_addr = None
+    addresses = []
     mac_addr = None
     for addr in addrs:
         if addr.family == socket.AF_INET and addr.address:
-            ipv4_addr = ipaddress.ip_interface(f"{addr.address}/{addr.netmask}")
+            if ip_version in (0, 4):
+                addresses.append(ipaddress.ip_interface(f"{addr.address}/{addr.netmask}"))
         elif addr.family == socket.AF_INET6 and addr.address:
             # Skip link-local addresses when possible
             if addr.address.lower().startswith(("fe80:", "fe80::")):
@@ -41,24 +51,29 @@ def get_interface_info(name: str, ip_version: int = 4) -> InterfaceInfo:
             if addr.netmask:
                 try:
                     prefixlen = _ipv6_prefix_length(addr.netmask)
-                    ipv6_addr = ipaddress.ip_interface(f"{addr_no_scope}/{prefixlen}")
+                    parsed = ipaddress.ip_interface(f"{addr_no_scope}/{prefixlen}")
                 except ValueError:
-                    ipv6_addr = ipaddress.ip_interface(addr_no_scope)
+                    parsed = ipaddress.ip_interface(addr_no_scope)
             else:
-                ipv6_addr = ipaddress.ip_interface(addr_no_scope)
+                parsed = ipaddress.ip_interface(addr_no_scope)
+            if ip_version in (0, 6):
+                addresses.append(parsed)
         elif addr.family == psutil.AF_LINK and addr.address:
             mac_addr = addr.address
 
-    chosen_addr = ipv4_addr if ip_version == 4 else ipv6_addr
-    if chosen_addr is None:
-        raise ValueError(f"Interface {name} does not have an IPv{ip_version} address")
+    if not addresses:
+        family = f"IPv{ip_version}" if ip_version in (4, 6) else "IPv4/IPv6"
+        raise ValueError(f"Interface {name} does not have an {family} address")
     if mac_addr is None:
         raise ValueError(f"Interface {name} does not have a MAC address")
 
-    gateway = _default_gateway(name, ip_version)
     stats = psutil.net_if_stats().get(name)
     mtu = stats.mtu if stats and stats.mtu > 0 else 1500
-    return InterfaceInfo(name=name, address=chosen_addr, mac=mac_addr, gateway=gateway, mtu=mtu)
+    infos = []
+    for address in addresses:
+        gateway = _default_gateway(name, address.version)
+        infos.append(InterfaceInfo(name=name, address=address, mac=mac_addr, gateway=gateway, mtu=mtu))
+    return infos
 
 
 def _ipv6_prefix_length(netmask: str) -> int:

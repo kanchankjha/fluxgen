@@ -16,7 +16,7 @@ from .applications import normalize_application_names
 @dataclass
 class RuntimeConfig:
     interface: str
-    dst: str
+    dst: str = ""
     clients: int = 1
     subnet_pool: Optional[str] = None
     dest_subnet: Optional[str] = None
@@ -52,6 +52,11 @@ class RuntimeConfig:
     quiet: bool = False
     client_start_index: Optional[int] = None
     application: Tuple[str, ...] = ()
+    mode: str = "client"
+    bidirectional: bool = False
+    response_timeout: float = 1.0
+    session_timeout: float = 300.0
+    max_sessions: int = 10000
     extra: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -96,7 +101,10 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
     """
     if "interface" not in data or not data.get("interface"):
         raise ValueError("Missing required option: interface")
-    if not data.get("dst") and not data.get("dest_subnet"):
+    mode = str(data.get("mode", "client") or "client").lower()
+    if mode not in {"client", "server"}:
+        raise ValueError("mode must be one of: client, server")
+    if mode == "client" and not data.get("dst") and not data.get("dest_subnet"):
         raise ValueError("Provide dst or dest_subnet to target traffic")
 
     clients = _as_int(data.get("clients"), default=1)
@@ -115,6 +123,11 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
         raise ValueError("client_start_index must be a positive integer")
 
     application = normalize_application_names(data.get("application"))
+    bidirectional = bool(data.get("bidirectional", False))
+    if mode == "server" and bidirectional:
+        raise ValueError("bidirectional mode is only valid with client mode")
+    if bidirectional and (bool(data.get("beast", False)) or bool(data.get("fuzz", False))):
+        raise ValueError("bidirectional mode cannot be combined with --beast or --fuzz")
     if application:
         conflicts = [
             key for key in ("proto", "flags", "payload", "data_size", "beast")
@@ -127,6 +140,15 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
     duration = _as_float(data.get("duration"), default=0.0)
     if duration < 0:
         raise ValueError("time must be zero or a positive number of seconds")
+    response_timeout = _as_float(data.get("response_timeout"), default=1.0)
+    if response_timeout <= 0:
+        raise ValueError("response_timeout must be positive")
+    session_timeout = _as_float(data.get("session_timeout"), default=300.0)
+    if session_timeout <= 0:
+        raise ValueError("session_timeout must be positive")
+    max_sessions = _as_int(data.get("max_sessions"), default=10000)
+    if max_sessions <= 0:
+        raise ValueError("max_sessions must be positive")
 
     beast = bool(data.get("beast", False))
     if beast:
@@ -138,7 +160,7 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
             rendered = ", ".join(f"--{key.replace('_', '-')}" for key in conflicts)
             raise ValueError(f"Beast mode controls packet profiles; remove: {rendered}")
 
-    count = _as_int(data.get("count"), default=0 if beast else 1)
+    count = _as_int(data.get("count"), default=0 if beast or mode == "server" else 1)
     if count < 0:
         raise ValueError("count must be zero or a positive integer")
 
@@ -171,6 +193,8 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
     }
     if proto not in valid_protocols:
         raise ValueError(f"Invalid protocol: {proto} (must be one of {', '.join(sorted(valid_protocols))})")
+    if bidirectional and not application and proto not in {"tcp", "udp", "icmp"}:
+        raise ValueError("bidirectional mode supports tcp, udp, and icmp traffic")
 
     ip_version = _resolve_ip_version(data)
     if ip_version == 6 and proto in {"arp", "igmp"}:
@@ -233,6 +257,11 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
         quiet=bool(data.get("quiet", False)),
         extra={k: v for k, v in data.items() if k not in _known_keys()},
         application=application,
+        mode=mode,
+        bidirectional=bidirectional,
+        response_timeout=response_timeout,
+        session_timeout=session_timeout,
+        max_sessions=max_sessions,
     )
 
 
@@ -252,6 +281,11 @@ def _known_keys() -> set:
         "clients",
         "client_start_index",
         "application",
+        "mode",
+        "bidirectional",
+        "response_timeout",
+        "session_timeout",
+        "max_sessions",
         "subnet_pool",
         "dest_subnet",
         "ip_version",
@@ -349,4 +383,6 @@ def _resolve_ip_version(data: Dict[str, Any]) -> int:
         raise ValueError(f"ip_version {desired} does not match provided address family {detected}")
     if desired:
         return desired
+    if str(data.get("mode", "client") or "client").lower() == "server":
+        return 0
     return detected or 4

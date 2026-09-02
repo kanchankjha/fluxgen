@@ -7,6 +7,7 @@
 ## Features
 
 - **Multi-client simulation** - Simulate hundreds of clients from a single host
+- **Independent responder** - Run a dual-stack responder on a separate destination host
 - **Protocol support** - TCP, UDP, ICMP, IGMP, GRE, ESP, AH, SCTP, ARP, VRRP, OSPF
 - **Header fuzzing** - Emit each normal packet together with a structure-aware fuzzed copy
 - **Spoofed identities** - Unique IP/MAC addresses per simulated client
@@ -16,6 +17,7 @@
 - **Load testing** - Flood mode for maximum throughput
 - **Beast mode** - Continuously rotate protocols, ports, flags, and MTU-sized traffic profiles
 - **Configuration files** - YAML/JSON configuration support
+- **Bidirectional transactions** - Complete synthetic TCP/UDP/ICMP exchanges over the wire
 
 ## Installation
 
@@ -255,6 +257,18 @@ pcap_out: load_test.pcap
 fluxgen --config config.yaml
 ```
 
+An independent responder configuration does not need a destination or client
+pool. The interface supplies its IPv4 and IPv6 response addresses:
+
+```yaml
+interface: eth1
+mode: server
+application: all
+ip_version: auto
+duration: 300
+pcap_out: responder.pcap
+```
+
 ### 8. Beast Mode
 
 Generate a continuous mix of all supported protocols (excluding IPv4-only ARP
@@ -414,6 +428,17 @@ fluxgen --interface eth0 --clients 100 --dst 10.0.0.5 --dport 80 \
 - `--interface IFACE` - Network interface to send packets on (e.g., eth0, wlan0)
 - `--dst IP` - Destination IP address (required unless using `--dest-subnet`)
 
+#### Operating Modes
+- `--mode {client,server}` - Run the normal sender or an independent responder (default: `client`)
+- `--bidirectional` - In client mode, track responder packets and complete synthetic transactions
+- `--response-timeout SECONDS` - Reply wait time for bidirectional client transactions (default: `1.0`)
+- `--session-timeout SECONDS` - Expire inactive responder TCP sessions (default: `300`)
+- `--max-sessions N` - Bound responder TCP session memory (default: `10000`)
+
+Server mode requires only `--interface`; it does not use `--dst`, `--clients`,
+or client identity allocation. It discovers both IPv4 and non-link-local IPv6
+addresses from that interface unless `--ip-version` selects one family.
+
 #### Client Simulation
 - `--clients N` - Number of simulated clients with unique IPs/MACs (default: 1)
 - `--client-start-index N` - Start client IP allocation at host index `N` within the client subnet (for example, `21` gives `192.168.1.21` in `192.168.1.0/24`)
@@ -454,6 +479,52 @@ fluxgen --interface eth0 --clients 100 --application webex,outlook,iot --dst 10.
 # Cycle through all 100 profiles
 fluxgen --interface eth0 --clients 100 --application all --dst 10.0.0.5 --count 1000
 ```
+
+### Independent responder mode
+
+Fluxgen can run as an independent responder on a separate machine from the
+sender. In server mode, `--interface` is the address-selection input:
+Fluxgen discovers the interface's eligible IPv4 and non-link-local IPv6
+addresses and responds to traffic addressed to those addresses. With
+`--ip-version auto` (the default for server mode), both families are enabled;
+use `--ip-version 4` or `--ip-version 6` to restrict the responder to one
+family.
+
+Start the responder on the destination machine:
+
+```bash
+fluxgen --mode server --interface eth1 --application all --time 300
+```
+
+Start stateless application traffic on the sender machine as before:
+
+```bash
+fluxgen --interface eth0 --clients 100 --dst 192.0.2.10 \
+    --application all --count 1000
+```
+
+Use `--bidirectional` on the sender when the client should track replies and
+complete synthetic transactions:
+
+```bash
+fluxgen --interface eth0 --clients 100 --dst 192.0.2.10 \
+    --application all --bidirectional --count 1000
+```
+
+The responder and sender coordinate only through packets; they do not share a
+process or control connection. The responder supports synthetic TCP
+SYN/SYN-ACK and payload exchanges, UDP request/response traffic,
+ICMP/ICMPv6 echo replies, ARP replies, and basic SCTP responses. All 100
+application profiles are supported as synthetic TCP/UDP request/response
+shapes. These profiles are designed for DUT flow and traffic classification;
+they do not authenticate to or reproduce proprietary, encrypted applications
+such as Webex, Outlook, VPNs, or database products.
+
+Server mode is scoped to packets addressed to the selected interface. It does
+not act as an open response reflector. For routed testbeds, ensure the
+responder host has a return route to the simulated client subnet; for a
+directly connected DUT, the responder uses the incoming Ethernet peer for the
+reverse frame.
 
 #### Destination Options
 - `--dest-subnet CIDR` - IP range for random destination addresses
@@ -795,6 +866,7 @@ fluxgen/
 │   ├── identity.py      # Client identity generation (IP/MAC)
 │   ├── netinfo.py       # Network interface introspection
 │   ├── packet_builder.py # Packet crafting with Scapy
+│   ├── responder.py     # Independent dual-stack packet responder
 │   └── sender.py        # Multi-client orchestration and sending
 ├── tests/               # Unit tests
 │   ├── test_applications.py # Application profile tests
@@ -803,6 +875,7 @@ fluxgen/
 │   ├── test_identity.py # Client identity tests
 │   ├── test_netinfo.py  # Network interface tests
 │   ├── test_packet_builder.py # Packet building tests
+│   ├── test_responder.py # Independent responder tests
 │   └── test_sender.py   # Sender orchestration tests
 ├── pyproject.toml       # Project metadata and dependencies
 ├── requirements.txt     # Runtime dependencies
@@ -816,7 +889,8 @@ fluxgen/
 - **identity.py**: Generates unique client identities (source IPs, MACs) within subnet constraints
 - **netinfo.py**: Queries system network interfaces using `psutil` and `netifaces`
 - **packet_builder.py**: Constructs protocol packets using Scapy with custom fields
-- **sender.py**: Manages multiple client threads/processes, sends packets, and collects statistics
+- **responder.py**: Captures traffic addressed to interface IPv4/IPv6 addresses and emits synthetic protocol/application responses
+- **sender.py**: Manages multiple client threads/processes, sends packets, optionally tracks responses, and collects statistics
 - **config.py**: Loads configuration from YAML/JSON files for reproducible testing scenarios
 
 ## Testing
@@ -854,6 +928,8 @@ The test suite covers:
 - ✅ Network interface introspection
 - ✅ Packet building for all supported protocols
 - ✅ Multi-client sender orchestration
+- ✅ Independent dual-stack responder and synthetic protocol responses
+- ✅ Bidirectional client transaction framing and response correlation
 - ✅ Error handling and edge cases
 - ✅ Dry-run mode and PCAP output
 

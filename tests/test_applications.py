@@ -11,8 +11,11 @@ from fluxgen.applications import (
     ApplicationFlow,
     application_profile_count,
     build_application_payload,
+    build_application_response_payload,
+    identify_application_payload,
     normalize_application_names,
     select_application_profile,
+    select_responder_flow,
 )
 from fluxgen.config import RuntimeConfig
 from fluxgen.identity import Identity
@@ -106,3 +109,21 @@ class TestApplicationCatalog:
         assert first == second
         assert flow.payload_min <= len(first) <= flow.payload_max
         assert b"fluxgen/webex/" in first
+
+    def test_response_payload_and_marker_identification(self):
+        profile = APPLICATION_PROFILES["webex"]
+        flow = profile.flow_for(0)
+        payload = build_application_response_payload(profile, flow, request_index=2)
+        assert flow.payload_min <= len(payload) <= flow.payload_max
+        assert payload.startswith(b"fluxgen-response/webex/")
+        request = build_application_payload(profile, flow, 0, 0)
+        identified = identify_application_payload(request)
+        assert identified == (profile, flow)
+
+    def test_responder_flow_uses_marker_then_port(self):
+        profile = APPLICATION_PROFILES["webex"]
+        flow = profile.flow_for(0)
+        request = build_application_payload(profile, flow, 0, 0)
+        assert select_responder_flow((), "tcp", 443, request) == (profile, flow)
+        selected = select_responder_flow(("all",), "tcp", 443)
+        assert selected is not None

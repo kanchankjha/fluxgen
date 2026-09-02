@@ -15,6 +15,19 @@ class TestParseArgs:
         assert args.interface == "eth0"
         assert args.dst == "10.0.0.1"
 
+    def test_parse_args_server_and_bidirectional_options(self):
+        args = _parse_args([
+            "--mode", "server", "--interface", "eth0", "--application", "all",
+        ])
+        assert args.mode == "server"
+        assert args.application == ["all"]
+        client = _parse_args([
+            "--interface", "eth0", "--dst", "10.0.0.1",
+            "--bidirectional", "--response-timeout", "2.5",
+        ])
+        assert client.bidirectional is True
+        assert client.response_timeout == 2.5
+
     def test_parse_args_beast_mode_aliases(self):
         """Requested singular-client and faster spellings map to existing fields."""
         args = _parse_args([
@@ -268,3 +281,18 @@ class TestMain:
         # Verify file config was passed to merge
         call_args = mock_merge.call_args[0]
         assert call_args[0] == file_config
+
+    @patch("fluxgen.cli.Responder")
+    @patch("fluxgen.cli.build_runtime_config")
+    def test_main_selects_independent_responder(self, mock_build_config, mock_responder):
+        mock_config = RuntimeConfig(interface="eth1", mode="server")
+        mock_build_config.return_value = mock_config
+        instance = MagicMock()
+        instance.run.return_value = MagicMock(sent=2, errors=0)
+        mock_responder.return_value = instance
+
+        result = main(["--mode", "server", "--interface", "eth1"])
+
+        assert result == 0
+        mock_responder.assert_called_once_with(mock_config)
+        instance.run.assert_called_once()

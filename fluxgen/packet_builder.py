@@ -119,6 +119,12 @@ def build_frames(
     application_profile: Optional[ApplicationProfile] = None,
     application_index: int = 0,
     client_index: int = 0,
+    sport: Optional[int] = None,
+    dport: Optional[int] = None,
+    tcp_flags: Optional[str] = None,
+    tcp_seq: Optional[int] = None,
+    tcp_ack: Optional[int] = None,
+    include_application_payload: bool = True,
 ) -> List:
     """
     Build one or more Ethernet frames for a single send.
@@ -151,11 +157,19 @@ def build_frames(
     )
     ttl = profile.ttl if profile else cfg.ttl
     tos = profile.tos if profile else cfg.tos
-    sport = profile.sport if profile else cfg.sport
-    dport = profile.dport if profile else cfg.dport
+    sport = profile.sport if profile else sport if sport is not None else cfg.sport
+    dport = profile.dport if profile else dport if dport is not None else cfg.dport
     if application_flow and dport is None:
         dport = application_flow.port_for(application_index)
-    flags = profile.flags if profile else application_flow.tcp_flags if application_flow else cfg.flags
+    flags = (
+        profile.flags
+        if profile
+        else tcp_flags
+        if tcp_flags is not None
+        else application_flow.tcp_flags
+        if application_flow
+        else cfg.flags
+    )
     icmp_type = profile.icmp_type if profile else cfg.icmp_type
     icmp_code = profile.icmp_code if profile else cfg.icmp_code
 
@@ -188,7 +202,7 @@ def build_frames(
         if cfg.ip_id is not None:
             ip_layer.id = cfg.ip_id
 
-    if application_profile and application_flow:
+    if application_profile and application_flow and include_application_payload:
         payload = Raw(
             load=build_application_payload(
                 application_profile,
@@ -205,8 +219,8 @@ def build_frames(
             sport=sport or RandShort(),
             dport=dport or 0,
             flags=flags,
-            seq=random.randint(0, 2**32 - 1),
-            ack=0,
+            seq=random.randint(0, 2**32 - 1) if tcp_seq is None else tcp_seq,
+            ack=0 if tcp_ack is None else tcp_ack,
         )
     elif proto == "udp":
         transport = UDP(

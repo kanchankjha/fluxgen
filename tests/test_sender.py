@@ -1,11 +1,15 @@
 """Unit tests for sender module."""
 
 import ipaddress
+import queue
 import time
 import pytest
 from unittest.mock import MagicMock, Mock, patch
 from fluxgen.sender import Simulator, SendStats, _build_dest_pool
 from fluxgen.config import RuntimeConfig
+from fluxgen.applications import APPLICATION_PROFILES
+from fluxgen.identity import Identity
+from scapy.all import IP, TCP
 
 
 @pytest.fixture
@@ -118,6 +122,44 @@ class TestSimulator:
         assert sim.stats.errors == 0
         assert sim.dest_mac_cache == {}
         assert sim.identities == []
+
+    def test_response_key_for_tcp_server_packet(self):
+        packet = IP(src="10.0.0.5", dst="192.168.1.100") / TCP(
+            sport=443, dport=1234, flags="SA"
+        )
+        assert Simulator._response_key(packet) == (
+            "tcp", "10.0.0.5", "192.168.1.100", 443, 1234
+        )
+
+    @patch("fluxgen.sender.build_frames")
+    @patch("fluxgen.sender.sendp")
+    def test_bidirectional_tcp_transaction_uses_wire_state(self, mock_sendp, mock_build):
+        response_queue = queue.Queue()
+        response_queue.put(IP(src="10.0.0.5", dst="192.168.1.100") / TCP(
+            sport=443, dport=1234, flags="SA", seq=200, ack=101
+        ))
+        response_queue.put(IP(src="10.0.0.5", dst="192.168.1.100") / TCP(
+            sport=443, dport=1234, flags="PA", seq=201, ack=130
+        ) / b"response")
+        mock_build.return_value = [MagicMock()]
+        cfg = RuntimeConfig(
+            interface="eth0", dst="10.0.0.5", application=("webex",),
+            bidirectional=True, response_timeout=0.01,
+        )
+        sim = Simulator(cfg)
+        with patch.object(sim, "_register_response", return_value=response_queue), \
+             patch.object(sim, "_unregister_response"), \
+             patch.object(sim, "_transmit_frames") as transmit:
+            completed = sim._run_bidirectional_transaction(
+                Identity(ip=ipaddress.IPv4Address("192.168.1.100"), mac="02:00:00:00:00:01"),
+                "10.0.0.5", "aa:bb:cc:dd:ee:ff", APPLICATION_PROFILES["webex"],
+                APPLICATION_PROFILES["webex"].flow_for(0), 0, 0, None,
+            )
+        assert completed is True
+        assert transmit.call_count == 4
+        assert [call.kwargs["tcp_flags"] for call in mock_build.call_args_list] == [
+            "S", "PA", "A", "FA"
+        ]
 
     @patch("fluxgen.sender.get_interface_info")
     @patch("fluxgen.sender.generate_identities")

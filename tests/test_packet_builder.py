@@ -128,6 +128,24 @@ class TestBuildFrames:
 
         assert frame[TCP].dport == 9999
 
+    def test_build_frame_honors_explicit_tcp_transaction_numbers(self, test_identity):
+        cfg = RuntimeConfig(interface="eth0", dst="10.0.0.5")
+        frame = build_frames(
+            cfg,
+            test_identity,
+            "10.0.0.5",
+            "aa:bb:cc:dd:ee:ff",
+            sport=1234,
+            dport=443,
+            tcp_flags="PA",
+            tcp_seq=100,
+            tcp_ack=200,
+            include_application_payload=False,
+        )[0]
+        assert frame[TCP].seq == 100
+        assert frame[TCP].ack == 200
+        assert frame[TCP].flags == "PA"
+
     def test_beast_and_application_profiles_are_rejected(self, test_identity):
         cfg = RuntimeConfig(interface="eth0", dst="10.0.0.5", beast=True)
         with pytest.raises(ValueError, match="cannot be combined"):

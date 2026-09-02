@@ -9,6 +9,7 @@ import sys
 from typing import Any, Dict, List, Optional
 
 from .config import build_runtime_config, load_config_file, merge_config
+from .responder import Responder
 from .sender import Simulator
 
 
@@ -22,7 +23,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     merged = merge_config(file_cfg, cli_cfg)
     cfg = build_runtime_config(merged)
 
-    simulator = Simulator(cfg)
+    simulator = Responder(cfg) if cfg.mode == "server" else Simulator(cfg)
     stats = simulator.run()
     print(f"Finished: sent={stats.sent} errors={stats.errors}")
     return 0
@@ -34,6 +35,12 @@ def _parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
         description="Simulate multiple clients sending hping3-like traffic",
     )
     parser.add_argument("--config", help="Optional YAML or JSON config file")
+    parser.add_argument(
+        "--mode",
+        choices=["client", "server"],
+        default=None,
+        help="Run as a sender or independent responder (default: client)",
+    )
     parser.add_argument("--interface", help="Interface to send on (required)")
     parser.add_argument("--dst", help="Destination IP address (required unless using dest_subnet)")
     parser.add_argument("--dest-subnet", help="CIDR to randomize destination addresses")
@@ -52,6 +59,33 @@ def _parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
         default=None,
         metavar="NAME[,NAME...]",
         help="Application-shaped traffic profile(s), or all (repeatable/comma-separated)",
+    )
+    parser.add_argument(
+        "--bidirectional",
+        action="store_true",
+        default=None,
+        help="Track responses and complete stateful client transactions",
+    )
+    parser.add_argument(
+        "--response-timeout",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="Wait time for a responder reply in bidirectional mode (default: 1.0)",
+    )
+    parser.add_argument(
+        "--session-timeout",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="Expire inactive responder sessions after this many seconds (default: 300)",
+    )
+    parser.add_argument(
+        "--max-sessions",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Maximum number of responder TCP sessions (default: 10000)",
     )
     parser.add_argument("--subnet-pool", help="CIDR pool for client IPs (defaults to interface subnet)")
     parser.add_argument("--ip-version", choices=["4", "6", "auto"], default=None, help="Force IPv4, IPv6, or auto-detect")

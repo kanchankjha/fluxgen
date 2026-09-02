@@ -26,6 +26,8 @@ class TestRuntimeConfig:
         assert cfg.flags == "S"
         assert cfg.ttl == 64
         assert cfg.interval == 0.1
+        assert cfg.mode == "client"
+        assert cfg.bidirectional is False
 
     def test_custom_values(self):
         """Test RuntimeConfig with custom values."""
@@ -188,6 +190,42 @@ class TestBuildRuntimeConfig:
         assert cfg.clients == 1
         assert cfg.proto == "tcp"
         assert cfg.ip_version == 4
+
+    def test_server_config_discovers_both_families(self):
+        cfg = build_runtime_config({"interface": "eth0", "mode": "server"})
+        assert cfg.dst == ""
+        assert cfg.mode == "server"
+        assert cfg.ip_version == 0
+        assert cfg.count == 0
+
+    def test_bidirectional_client_config(self):
+        cfg = build_runtime_config({
+            "interface": "eth0",
+            "dst": "10.0.0.1",
+            "bidirectional": True,
+            "response_timeout": 2,
+        })
+        assert cfg.bidirectional is True
+        assert cfg.response_timeout == 2.0
+
+    def test_server_rejects_bidirectional_flag(self):
+        with pytest.raises(ValueError, match="only valid with client"):
+            build_runtime_config({"interface": "eth0", "mode": "server", "bidirectional": True})
+
+    @pytest.mark.parametrize("key", ["beast", "fuzz"])
+    def test_bidirectional_rejects_stateless_modes(self, key):
+        with pytest.raises(ValueError, match="cannot be combined"):
+            build_runtime_config({
+                "interface": "eth0", "dst": "10.0.0.1",
+                "bidirectional": True, key: True,
+            })
+
+    def test_bidirectional_rejects_unsupported_protocol(self):
+        with pytest.raises(ValueError, match="supports tcp, udp, and icmp"):
+            build_runtime_config({
+                "interface": "eth0", "dst": "10.0.0.1",
+                "bidirectional": True, "proto": "gre",
+            })
 
     def test_client_start_index(self):
         cfg = build_runtime_config({

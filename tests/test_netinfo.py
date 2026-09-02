@@ -5,7 +5,7 @@ import socket
 from unittest.mock import MagicMock, Mock, patch
 import pytest
 import psutil
-from fluxgen.netinfo import InterfaceInfo, get_interface_info, _default_gateway, _ipv6_prefix_length
+from fluxgen.netinfo import InterfaceInfo, get_interface_info, get_interface_infos, _default_gateway, _ipv6_prefix_length
 
 
 class TestGetInterfaceInfo:
@@ -149,6 +149,18 @@ class TestGetInterfaceInfo:
         assert info.address.network == ipaddress.IPv6Network("2001:db8::/64")
         assert info.mac == "02:00:00:aa:bb:cc"
         assert info.gateway == "2001:db8::fffe"
+
+    @patch("psutil.net_if_stats")
+    @patch("psutil.net_if_addrs")
+    def test_get_interface_infos_returns_ipv4_and_ipv6(self, mock_net_if_addrs, mock_net_if_stats):
+        v4 = Mock(family=socket.AF_INET, address="192.168.1.10", netmask="255.255.255.0")
+        v6 = Mock(family=socket.AF_INET6, address="2001:db8::10", netmask="64")
+        mac = Mock(family=psutil.AF_LINK, address="02:00:00:aa:bb:cc")
+        mock_net_if_addrs.return_value = {"eth0": [v4, v6, mac]}
+        mock_net_if_stats.return_value = {"eth0": Mock(mtu=1500)}
+        with patch("fluxgen.netinfo._default_gateway", return_value=None):
+            infos = get_interface_infos("eth0", ip_version=0)
+        assert [info.address.version for info in infos] == [4, 6]
 
     def test_ipv6_prefix_length_formats(self):
         """Parse the formats psutil returns across supported platforms."""

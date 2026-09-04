@@ -17,7 +17,7 @@
 - **Load testing** - Flood mode for maximum throughput
 - **Beast mode** - Continuously rotate protocols, ports, flags, and MTU-sized traffic profiles
 - **Configuration files** - YAML/JSON configuration support
-- **Bidirectional transactions** - Complete synthetic TCP/UDP/ICMP exchanges over the wire
+- **Bidirectional transactions** - Complete protocol-native TCP/UDP/ICMP application exchanges over the wire
 
 ## Installation
 
@@ -430,7 +430,7 @@ fluxgen --interface eth0 --clients 100 --dst 10.0.0.5 --dport 80 \
 
 #### Operating Modes
 - `--mode {client,server}` - Run the normal sender or an independent responder (default: `client`)
-- `--bidirectional` - In client mode, track responder packets and complete synthetic transactions
+- `--bidirectional` - In client mode, track responder packets and complete application transactions
 - `--response-timeout SECONDS` - Reply wait time for bidirectional client transactions (default: `1.0`)
 - `--session-timeout SECONDS` - Expire inactive responder TCP sessions (default: `300`)
 - `--max-sessions N` - Bound responder TCP session memory (default: `10000`)
@@ -442,15 +442,16 @@ addresses from that interface unless `--ip-version` selects one family.
 #### Client Simulation
 - `--clients N` - Number of simulated clients with unique IPs/MACs (default: 1)
 - `--client-start-index N` - Start client IP allocation at host index `N` within the client subnet (for example, `21` gives `192.168.1.21` in `192.168.1.0/24`)
-- `--application NAME[,NAME...]` - Generate application-shaped traffic using one or more built-in profiles, or use `all` to cycle through the full catalog
+- `--application NAME[,NAME...]` - Generate protocol-native application traffic using one or more built-in profiles, or use `all` to cycle through the full catalog
 - `--subnet-pool CIDR` - IP range for client addresses (default: interface subnet)
 - `--rand-source` - Randomize source identity for each packet
 
-Application profiles control the default transport, destination ports, payload
-sizes, and traffic shape. They generate synthetic L7-shaped frames rather than
-real authenticated application sessions. Application profiles cannot be
-combined with `--proto`, `--flags`, `--payload`, `--data-size`, or `--beast`; explicit
-`--dport` and `--sport` overrides remain supported.
+Application profiles control the default transport, destination ports, protocol
+metadata, payload sizes, and traffic shape. They generate protocol-native,
+classifier-visible representative transactions rather than authenticated
+vendor sessions. Application profiles cannot be combined with `--proto`,
+`--flags`, `--payload`, `--data-size`, or `--beast`; explicit `--dport` and
+`--sport` overrides remain supported.
 
 The built-in catalog contains 100 profiles:
 
@@ -504,7 +505,7 @@ fluxgen --interface eth0 --clients 100 --dst 192.0.2.10 \
 ```
 
 Use `--bidirectional` on the sender when the client should track replies and
-complete synthetic transactions:
+complete protocol-native transactions:
 
 ```bash
 fluxgen --interface eth0 --clients 100 --dst 192.0.2.10 \
@@ -512,13 +513,20 @@ fluxgen --interface eth0 --clients 100 --dst 192.0.2.10 \
 ```
 
 The responder and sender coordinate only through packets; they do not share a
-process or control connection. The responder supports synthetic TCP
-SYN/SYN-ACK and payload exchanges, UDP request/response traffic,
-ICMP/ICMPv6 echo replies, ARP replies, and basic SCTP responses. All 100
-application profiles are supported as synthetic TCP/UDP request/response
-shapes. These profiles are designed for DUT flow and traffic classification;
-they do not authenticate to or reproduce proprietary, encrypted applications
-such as Webex, Outlook, VPNs, or database products.
+process or control connection. The responder supports TCP SYN/SYN-ACK and
+protocol response exchanges, UDP request/response traffic, ICMP/ICMPv6 echo
+replies, ARP replies, and basic SCTP responses. The application profiles use
+valid protocol framing for HTTP, TLS ClientHello/SNI, DNS, MQTT, SIP/RTP, SSH,
+NTP, DHCP, CoAP, Modbus, LDAP, RADIUS, SNMP, syslog, and database-style
+traffic. Application identity is carried in visible protocol fields such as
+Host, SNI, URI, client ID, service banner, or protocol metadata. The profiles
+are representative and do not authenticate to or reproduce proprietary,
+encrypted applications such as Webex, Outlook, VPNs, or database products.
+
+Classification remains dependent on the router's firmware and application
+signature database. A profile can therefore be decoded as its underlying
+protocol or generic encrypted traffic when the router has no matching
+application signature.
 
 Server mode is scoped to packets addressed to the selected interface. It does
 not act as an open response reflector. For routed testbeds, ensure the
@@ -884,12 +892,12 @@ fluxgen/
 
 ### Key Modules
 
-- **applications.py**: Defines the 100 built-in application-shaped traffic profiles
+- **applications.py**: Defines the 100 built-in application profiles and their protocol-native payload/signature builders
 - **cli.py**: Parses command-line arguments, validates inputs, and orchestrates execution
 - **identity.py**: Generates unique client identities (source IPs, MACs) within subnet constraints
 - **netinfo.py**: Queries system network interfaces using `psutil` and `netifaces`
 - **packet_builder.py**: Constructs protocol packets using Scapy with custom fields
-- **responder.py**: Captures traffic addressed to interface IPv4/IPv6 addresses and emits synthetic protocol/application responses
+- **responder.py**: Captures traffic addressed to interface IPv4/IPv6 addresses and emits protocol/application responses selected from wire metadata
 - **sender.py**: Manages multiple client threads/processes, sends packets, optionally tracks responses, and collects statistics
 - **config.py**: Loads configuration from YAML/JSON files for reproducible testing scenarios
 
@@ -928,7 +936,7 @@ The test suite covers:
 - ✅ Network interface introspection
 - ✅ Packet building for all supported protocols
 - ✅ Multi-client sender orchestration
-- ✅ Independent dual-stack responder and synthetic protocol responses
+- ✅ Independent dual-stack responder and protocol-native application responses
 - ✅ Bidirectional client transaction framing and response correlation
 - ✅ Error handling and edge cases
 - ✅ Dry-run mode and PCAP output

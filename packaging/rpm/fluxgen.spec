@@ -1,5 +1,5 @@
 Name:           fluxgen
-Version:        2.0.0
+Version:        2.1.0
 Release:        1%{?dist}
 Summary:        Multi-client traffic generator inspired by hping3
 
@@ -40,6 +40,10 @@ addresses from the same subnet.
 %doc README.md
 
 %changelog
+* Fri Sep 04 2026 Kanchan Kumar Jha <kanchankjha@gmail.com> - 2.1.0-1
+- Upgrade application profiles to protocol-native classifier-visible traffic
+- Add protocol-aware independent responder responses
+
 * Wed Sep 02 2026 Kanchan Kumar Jha <kanchankjha@gmail.com> - 2.0.0-1
 - Add independent dual-stack responder mode
 - Add bidirectional synthetic client transactions and application responses

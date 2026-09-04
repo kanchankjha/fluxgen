@@ -99,7 +99,8 @@ class TestBuildFrames:
         assert frame[TCP].dport == 443
         assert frame[TCP].flags == "PA"
         assert frame.haslayer(Raw)
-        assert b"fluxgen/outlook/" in frame[Raw].load
+        assert frame[Raw].load.startswith(b"\x16\x03")
+        assert b"outlook.office.com" in frame[Raw].load
 
     def test_build_application_frame_rotates_mixed_flows(self, test_identity):
         cfg = RuntimeConfig(interface="eth0", dst="10.0.0.5")

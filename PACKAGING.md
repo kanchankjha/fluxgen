@@ -5,8 +5,10 @@ This repository supports package delivery for:
 - RHEL family (`.rpm` via YUM repo)
 - Python (`wheel` and `sdist`, with optional PyPI publish as `meraki-fluxgen`)
 
-Release 2.0.0 adds independent dual-stack responder mode and optional
-bidirectional client transactions. Live capture and transmission still
+The application traffic profiles generate protocol-native payloads for the
+independent dual-stack responder and optional bidirectional client
+transactions.
+Live capture and transmission still
 require Linux raw-socket capabilities.
 
 ## Supported Linux Flavors

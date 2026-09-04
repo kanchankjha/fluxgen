@@ -396,6 +396,12 @@ class Simulator:
                     tcp_ack=server_next,
                 )
                 self._transmit_frames(request, dest_ip, pcap_writer)
+                request_length = sum(
+                    len(bytes(frame[TCP].payload))
+                    for frame in request
+                    if frame.haslayer(TCP)
+                )
+                client_next += request_length
                 response = self._wait_for_response(response_queue)
                 if response is not None and response.haslayer(TCP):
                     response_tcp = response[TCP]

@@ -58,7 +58,7 @@ def _parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
         action="append",
         default=None,
         metavar="NAME[,NAME...]",
-        help="Application-shaped traffic profile(s), or all (repeatable/comma-separated)",
+        help="Protocol-native application profile(s), or all (repeatable/comma-separated)",
     )
     parser.add_argument(
         "--bidirectional",

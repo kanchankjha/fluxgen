@@ -273,7 +273,7 @@ class Responder:
                 session.client_next_seq = max(session.client_next_seq, client_seq + consumed)
                 session.requests += 1
                 flow = self._flow("tcp", int(tcp.dport), payload)
-                response_payload = self._response_payload(flow, session.requests)
+                response_payload = self._response_payload(flow, session.requests, payload)
                 response_flags = "FA" if "F" in flags else "PA" if response_payload else "A"
                 response = self._ether_reply(packet, server) / self._ip_reply(ip_layer, str(ip_layer.dst)) / TCP(
                     sport=int(tcp.dport),
@@ -294,7 +294,7 @@ class Responder:
         server = self._server_info(str(ip_layer.dst))
         payload = bytes(udp.payload) if udp.payload else b""
         flow = self._flow("udp", int(udp.dport), payload)
-        response_payload = self._response_payload(flow, 0) or b"fluxgen-response/udp"
+        response_payload = self._response_payload(flow, 0, payload) or b"APP/1.0 200 fluxgen\r\n\r\n"
         return [
             self._ether_reply(packet, server)
             / self._ip_reply(ip_layer, str(ip_layer.dst))
@@ -349,11 +349,14 @@ class Responder:
     def _response_payload(
         flow: Optional[Tuple[ApplicationProfile, ApplicationFlow]],
         request_index: int,
+        request_payload: bytes = b"",
     ) -> Optional[bytes]:
         if flow is None:
             return None
         profile, application_flow = flow
-        return build_application_response_payload(profile, application_flow, request_index)
+        return build_application_response_payload(
+            profile, application_flow, request_index, request_payload
+        )
 
     def _duration_expired(self) -> bool:
         return self.deadline is not None and time.monotonic() >= self.deadline

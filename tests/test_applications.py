@@ -1,4 +1,4 @@
-"""Tests for application-shaped traffic profiles."""
+"""Tests for protocol-native application traffic profiles."""
 
 import ipaddress
 
@@ -42,6 +42,7 @@ class TestApplicationCatalog:
                 assert all(0 <= port <= 65535 for port in flow.ports)
                 assert 0 < flow.payload_min <= flow.payload_max
                 assert flow.weight > 0
+                assert flow.signature
 
     def test_every_profile_flow_builds_a_valid_frame(self):
         cfg = RuntimeConfig(interface="eth0", dst="10.0.0.5")
@@ -108,16 +109,18 @@ class TestApplicationCatalog:
         second = build_application_payload(profile, flow, client_index=2, packet_index=3)
         assert first == second
         assert flow.payload_min <= len(first) <= flow.payload_max
-        assert b"fluxgen/webex/" in first
+        assert first.startswith(b"\x16\x03")
+        assert b"webex.com" in first
 
-    def test_response_payload_and_marker_identification(self):
+    def test_response_payload_and_protocol_identification(self):
         profile = APPLICATION_PROFILES["webex"]
         flow = profile.flow_for(0)
         payload = build_application_response_payload(profile, flow, request_index=2)
         assert flow.payload_min <= len(payload) <= flow.payload_max
-        assert payload.startswith(b"fluxgen-response/webex/")
+        assert payload.startswith(b"\x16\x03")
+        assert b"fluxgen-response" not in payload
         request = build_application_payload(profile, flow, 0, 0)
-        identified = identify_application_payload(request)
+        identified = identify_application_payload(request, transport="tcp", port=443)
         assert identified == (profile, flow)
 
     def test_responder_flow_uses_marker_then_port(self):
@@ -127,3 +130,37 @@ class TestApplicationCatalog:
         assert select_responder_flow((), "tcp", 443, request) == (profile, flow)
         selected = select_responder_flow(("all",), "tcp", 443)
         assert selected is not None
+
+    def test_standard_protocol_signatures_are_visible(self):
+        http = APPLICATION_PROFILES["web-browsing"]
+        http_flow = http.flow_for(0)
+        http_payload = build_application_payload(http, http_flow, 0, 0)
+        assert http_payload.startswith(b"GET /web-browsing/")
+        assert b"Host: web-browsing.fluxgen.invalid" in http_payload
+
+        dns = APPLICATION_PROFILES["dns"]
+        dns_flow = dns.flow_for(0)
+        dns_payload = build_application_payload(dns, dns_flow, 0, 0)
+        assert dns_payload[2:4] == b"\x01\x00"
+        assert select_responder_flow(("all",), "udp", 53, dns_payload) == (dns, dns_flow)
+
+    def test_every_catalog_flow_is_wire_identifiable_and_has_response(self):
+        for profile in APPLICATION_PROFILES.values():
+            for packet_index, flow in enumerate(profile.flows):
+                request = build_application_payload(profile, flow, 7, packet_index)
+                response = build_application_response_payload(
+                    profile, flow, packet_index, request
+                )
+                identified = identify_application_payload(
+                    request, flow.transport, flow.ports[0]
+                )
+                selected = select_responder_flow(
+                    ("all",), flow.transport, flow.ports[0], request
+                )
+                assert identified is not None
+                assert identified[0] == profile
+                assert selected is not None
+                assert selected[0] == profile
+                assert response
+                assert flow.payload_min <= len(request) <= flow.payload_max
+                assert flow.payload_min <= len(response) <= flow.payload_max

@@ -6,6 +6,7 @@ from scapy.all import ARP, Ether, ICMP, IP, IPv6, Raw, TCP, UDP
 from scapy.layers.inet6 import ICMPv6EchoReply, ICMPv6EchoRequest
 
 from fluxgen.config import RuntimeConfig
+from fluxgen.applications import APPLICATION_PROFILES, build_application_payload
 from fluxgen.responder import Responder
 
 
@@ -40,13 +41,16 @@ def test_server_answers_tcp_syn_and_application_payload():
     assert syn_ack[TCP].flags == "SA"
     assert syn_ack[TCP].ack == 101
 
+    request_payload = build_application_payload(
+        APPLICATION_PROFILES["webex"], APPLICATION_PROFILES["webex"].flow_for(0), 0, 0
+    )
     request = base / TCP(
         sport=1234, dport=443, flags="PA", seq=101, ack=syn_ack[TCP].seq + 1
-    ) / Raw(b"fluxgen/webex/control/request")
+    ) / Raw(request_payload)
     response = responder.build_responses(request)[0]
     assert response[TCP].flags == "PA"
     assert response[TCP].ack == 101 + len(request[TCP].payload)
-    assert bytes(response[Raw].load).startswith(b"fluxgen-response/webex/")
+    assert bytes(response[Raw].load).startswith(b"\x16\x03")
 
 
 def test_server_answers_udp_and_icmp():
@@ -54,11 +58,13 @@ def test_server_answers_udp_and_icmp():
     base = Ether(src="02:00:00:00:00:20", dst="02:00:00:00:00:10") / IP(
         src="192.0.2.20", dst="192.0.2.10"
     )
-    udp = base / UDP(sport=1234, dport=443) / Raw(b"fluxgen/webex/control/request")
+    webex = APPLICATION_PROFILES["webex"]
+    request_payload = build_application_payload(webex, webex.flow_for(2), 0, 0)
+    udp = base / UDP(sport=1234, dport=3478) / Raw(request_payload)
     udp_response = responder.build_responses(udp)[0]
-    assert udp_response[UDP].sport == 443
+    assert udp_response[UDP].sport == 3478
     assert udp_response[UDP].dport == 1234
-    assert bytes(udp_response[Raw].load).startswith(b"fluxgen-response/webex/")
+    assert bytes(udp_response[Raw].load).startswith(b"\x80")
 
     echo = base / ICMP(type=8, id=7, seq=3) / Raw(b"ping")
     echo_response = responder.build_responses(echo)[0]

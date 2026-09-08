@@ -153,7 +153,7 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
     beast = bool(data.get("beast", False))
     if beast:
         conflicts = [
-            key for key in ("proto", "payload", "data_size", "frag")
+            key for key in ("proto", "payload", "data_size")
             if key in data and data.get(key) not in (None, False, "")
         ]
         if conflicts:
@@ -212,9 +212,17 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
     data_size = _maybe_int(data.get("data_size"))
     if data_size is not None and data_size <= 0:
         raise ValueError("data_size must be a positive integer")
+    raw_frag_size = data.get("frag_size")
+    frag_size = None if raw_frag_size is None else _maybe_int(raw_frag_size)
+    if raw_frag_size is not None and frag_size is None:
+        raise ValueError("frag_size must be an integer")
+    if frag_size is not None and frag_size < 8:
+        raise ValueError("frag_size must be at least 8 bytes")
     frag_mode = str(data.get("frag_mode", "fixed") or "fixed").lower()
-    if frag_mode not in {"fixed", "random"}:
-        raise ValueError("frag_mode must be one of: fixed, random")
+    if frag_mode not in {"fixed", "random", "mixed"}:
+        raise ValueError("frag_mode must be one of: fixed, random, mixed")
+    if frag_size is not None and not data.get("frag", False):
+        raise ValueError("frag_size requires frag")
     if data.get("payload") is not None and data_size:
         raise ValueError("Specify either payload or data_size, not both")
 
@@ -247,7 +255,7 @@ def build_runtime_config(data: Dict[str, Any]) -> RuntimeConfig:
         tos=_as_int(data.get("tos"), default=0),
         ip_id=_maybe_int(data.get("ip_id")),
         frag=bool(data.get("frag", False)),
-        frag_size=_maybe_int(data.get("frag_size")),
+        frag_size=frag_size,
         frag_mode=frag_mode,
         icmp_type=icmp_type,
         icmp_code=icmp_code,

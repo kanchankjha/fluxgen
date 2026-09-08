@@ -2,7 +2,7 @@
 
 import ipaddress
 import pytest
-from scapy.all import Ether, IP, TCP, UDP, ICMP, Raw
+from scapy.all import Ether, IP, IPv6, TCP, UDP, ICMP, Raw
 from fluxgen.config import RuntimeConfig
 from fluxgen.applications import APPLICATION_PROFILES
 from fluxgen.identity import Identity
@@ -480,6 +480,70 @@ class TestBuildFrames:
         assert recorded["fragsize"] == 1100
         assert len(frames) == 1
         assert frames[0].haslayer(Ether)
+
+    @pytest.mark.parametrize("fragment_choice,expected_multiple", [(True, True), (False, False)])
+    def test_mixed_fragmentation_randomly_selects_fragment_or_normal_tcp(
+        self, test_identity, monkeypatch, fragment_choice, expected_multiple
+    ):
+        cfg = RuntimeConfig(
+            interface="eth0",
+            dst="10.0.0.5",
+            proto="tcp",
+            dport=443,
+            data_size=1000,
+            frag=True,
+            frag_size=128,
+            frag_mode="mixed",
+        )
+        monkeypatch.setattr(packet_builder.random, "choice", lambda choices: fragment_choice)
+        monkeypatch.setattr(packet_builder.random, "randint", lambda low, high: high)
+
+        frames = build_frames(cfg, test_identity, cfg.dst, "aa:bb:cc:dd:ee:ff")
+
+        assert (len(frames) > 1) is expected_multiple
+        assert frames[0].haslayer(IP)
+        if not expected_multiple:
+            assert frames[0][IP].flags == 0
+
+    @pytest.mark.parametrize("version", (4, 6))
+    @pytest.mark.parametrize("frag_mode", ("fixed", "random"))
+    def test_beast_supports_fragmentation_and_fuzzing(
+        self, test_identity, version, frag_mode, monkeypatch
+    ):
+        """Beast applies one datagram profile before fixed/random fragmentation."""
+        cfg = RuntimeConfig(
+            interface="eth0",
+            dst="10.0.0.5" if version == 4 else "2001:db8::5",
+            ip_version=version,
+            beast=True,
+            frag=True,
+            frag_size=128,
+            frag_mode=frag_mode,
+            fuzz=True,
+        )
+        profile = build_beast_profile(version, 1500, 1450 if version == 4 else 400)
+        if frag_mode == "random":
+            monkeypatch.setattr(packet_builder.random, "randint", lambda low, high: high)
+
+        frames = build_frames(
+            cfg,
+            test_identity if version == 4 else Identity(
+                ip=ipaddress.IPv6Address("2001:db8::2"), mac=test_identity.mac
+            ),
+            cfg.dst,
+            "aa:bb:cc:dd:ee:ff",
+            profile=profile,
+        )
+
+        assert len(frames) > 2
+        assert len(frames) % 2 == 0
+        for normal, fuzzed in zip(frames[::2], frames[1::2]):
+            assert bytes(normal) != bytes(fuzzed)
+            assert len(normal) == len(fuzzed)
+            if version == 4:
+                assert normal[IP].dst == cfg.dst
+            else:
+                assert normal[IPv6].dst == cfg.dst
 
     def test_build_frame_unsupported_protocol(self, test_identity):
         """Test building frame with unsupported protocol raises error."""

@@ -287,8 +287,16 @@ fluxgen --interface eth0 --client 100 --dst 192.168.1.1 --beast --faster --time 
 `--client` is an alias for `--clients`, and `--faster` is an alias for
 `--flood`. A missing `--time` or a value of `0` runs until interrupted. Beast
 mode controls the protocol and payload profile, so it cannot be combined with
-`--proto`, `--payload`, `--data-size`, or `--frag`. Explicit source and
-destination ports remain supported as overrides.
+`--proto`, `--payload`, or `--data-size`. Explicit source and destination ports
+remain supported as overrides. Beast can be combined with `--frag`: its
+selected frame size is applied to the logical datagram before fragmentation.
+Use `--frag-mode fixed` (the default) for the configured fragment size, or
+`--frag-mode random` to select one size between half and the configured upper
+bound for each logical send. Use `--frag-mode mixed` to randomly choose between
+an unfragmented packet and a fragmented packet on each logical send; mixed
+fragmented packets use the same random size range. The final fragment may be
+smaller. IPv4 fragmentation uses protocol-required 8-byte offset alignment.
+ARP is not an IP protocol and remains unfragmented.
 
 ### 9. Normal Traffic with Fuzzed Header Copies
 
@@ -322,7 +330,8 @@ Key flags:
 - `--rand-source` randomize client identity per packet
 - `--rand-dest --dest-subnet 10.0.0.0/24` randomize destination IPs
 - `--payload "deadbeef" --payload-hex` send custom payload, or `--data-size 1024` to auto-fill a payload
-- `--frag --frag-size 500 --frag-mode random` enable fragmentation with fixed or randomized fragment sizes
+- `--frag --frag-size 500 --frag-mode random` enable fragmentation with fixed or randomized fragment sizes (`--frag-size` is the fixed size or random upper bound)
+- `--frag --frag-size 500 --frag-mode mixed` randomly send fragmented or unfragmented packets
 - `--ip-version 4|6|auto` force IPv4/IPv6 or let fluxgen infer from destinations
 - `--flood` remove delay, `--dry-run` craft packets only, `--pcap-out out.pcap` write sent frames
 - `--beast` continuously vary supported protocols and packet sizes; add `--time SECONDS` for a bounded run
@@ -555,7 +564,8 @@ reverse frame.
 - `--tos N` - IP Type of Service / DSCP value (default: 0)
 - `--ip-id N` - IP identification field (default: random)
 - `--frag` - Enable IP fragmentation
-- `--frag-size N` - Fragment size in bytes (requires `--frag`)
+- `--frag-size N` - Fixed fragment size, or upper bound for random/mixed mode (requires `--frag`; minimum 8 bytes)
+- `--frag-mode fixed|random|mixed` - Always fragment, randomize fragment size, or randomly choose fragmented versus unfragmented packets
 
 #### Payload Options
 - `--payload STRING` - Packet payload as text

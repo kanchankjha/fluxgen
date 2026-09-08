@@ -170,7 +170,6 @@ class TestBuildRuntimeConfig:
         ("proto", "udp"),
         ("payload", "data"),
         ("data_size", 100),
-        ("frag", True),
     ])
     def test_beast_rejects_fixed_packet_profiles(self, option, value):
         with pytest.raises(ValueError, match="Beast mode controls packet profiles"):
@@ -180,6 +179,19 @@ class TestBuildRuntimeConfig:
                 "beast": True,
                 option: value,
             })
+
+    def test_beast_allows_configurable_fragmentation(self):
+        cfg = build_runtime_config({
+            "interface": "eth0",
+            "dst": "10.0.0.1",
+            "beast": True,
+            "frag": True,
+            "frag_size": 512,
+            "frag_mode": "mixed",
+        })
+        assert cfg.frag is True
+        assert cfg.frag_size == 512
+        assert cfg.frag_mode == "mixed"
 
     def test_minimal_config(self):
         """Test building config with minimal required fields."""
@@ -437,6 +449,11 @@ class TestBuildRuntimeConfig:
         data_bad_frag_mode = {"interface": "eth0", "dst": "10.0.0.1", "frag_mode": "weird"}
         with pytest.raises(ValueError, match="frag_mode"):
             build_runtime_config(data_bad_frag_mode)
+
+        with pytest.raises(ValueError, match="frag_size requires frag"):
+            build_runtime_config({"interface": "eth0", "dst": "10.0.0.1", "frag_size": 512})
+        with pytest.raises(ValueError, match="at least 8"):
+            build_runtime_config({"interface": "eth0", "dst": "10.0.0.1", "frag": True, "frag_size": 7})
 
     def test_ip_version_resolution(self):
         """Test ip_version detection and overrides."""

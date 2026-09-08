@@ -1,5 +1,5 @@
 Name:           fluxgen
-Version:        2.1.0
+Version:        2.2.0
 Release:        1%{?dist}
 Summary:        Multi-client traffic generator inspired by hping3
 
@@ -40,6 +40,10 @@ addresses from the same subnet.
 %doc README.md
 
 %changelog
+* Tue Sep 08 2026 Kanchan Kumar Jha <kanchankjha@gmail.com> - 2.2.0-1
+- Add mixed TCP fragmentation mode with random fragmented/unfragmented sends
+- Support fixed and random fragment sizing with Beast and fuzz traffic
+
 * Fri Sep 04 2026 Kanchan Kumar Jha <kanchankjha@gmail.com> - 2.1.0-1
 - Upgrade application profiles to protocol-native classifier-visible traffic
 - Add protocol-aware independent responder responses

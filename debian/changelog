@@ -1,3 +1,10 @@
+fluxgen (2.2.0-1) unstable; urgency=medium
+
+  * Add mixed TCP fragmentation mode with random fragmented/unfragmented sends.
+  * Support fixed and random fragment sizing with Beast and fuzz traffic.
+
+ -- Kanchan Kumar Jha <kanchankjha@gmail.com>  Tue, 08 Sep 2026 15:00:00 +0530
+
 fluxgen (2.1.0-1) unstable; urgency=medium
 
   * Upgrade application profiles to protocol-native classifier-visible traffic.

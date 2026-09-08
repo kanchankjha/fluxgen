@@ -291,13 +291,21 @@ def build_frames(
     if payload:
         base_pkt = base_pkt / payload
 
+    # Mixed mode is useful for hping-style traffic: each logical send can be
+    # either a normal packet or a genuinely fragmented packet.
+    fragment_packet = cfg.frag
+    if fragment_packet and cfg.frag_mode == "mixed":
+        fragment_packet = random.choice((True, False))
+
+    # Beast sizing describes the logical IP datagram. Apply it before
+    # fragmentation so the padding is part of the fragmentable payload and
+    # never turns an individual fragment into an oversized frame.
+    if profile and fragment_packet:
+        base_pkt = _apply_profile_size(base_pkt, profile, proto)
+
     frames = [base_pkt]
-    if cfg.frag:
-        # Default fragment size is 1480 bytes (typical 1500 MTU - 20 IP header)
-        fragsize = cfg.frag_size or 1480
-        if cfg.frag_mode == "random":
-            lower = max(8, fragsize // 2)
-            fragsize = random.randint(lower, fragsize)
+    if fragment_packet:
+        fragsize = _select_fragment_size(cfg)
         if cfg.ip_version == 6:
             # fragment6 uses the positional/camel-case ``fragSize`` argument,
             # unlike IPv4's fragment(..., fragsize=...).
@@ -306,7 +314,35 @@ def build_frames(
         else:
             fragments = fragment(base_pkt[IP], fragsize=fragsize)
             frames = [ether / frag for frag in fragments]
-    return _finish_frames(cfg, frames, profile, proto, fuzz_rng)
+    # When fragmented, Beast padding has already been applied to the
+    # datagram. Applying it again here would pad every fragment independently.
+    return _finish_frames(cfg, frames, profile if not fragment_packet else None, proto, fuzz_rng)
+
+
+def _select_fragment_size(cfg: RuntimeConfig) -> int:
+    """Select the configured fixed or per-send random fragment size."""
+    fragsize = 1480 if cfg.frag_size is None else cfg.frag_size
+    if fragsize < 8:
+        raise ValueError("frag_size must be at least 8 bytes")
+    if cfg.frag_mode in {"random", "mixed"}:
+        lower = max(8, fragsize // 2)
+        fragsize = random.randint(lower, fragsize)
+    return fragsize
+
+
+def _apply_profile_size(frame, profile: PacketProfile, proto: str):
+    """Pad a logical Beast datagram to its selected Ethernet frame size."""
+    if len(frame) > profile.target_frame_size:
+        raise ValueError(
+            f"Target frame size {profile.target_frame_size} is below the "
+            f"{proto} minimum of {len(frame)} bytes"
+        )
+    padding_size = profile.target_frame_size - len(frame)
+    if padding_size:
+        # Padding is serialized after protocol layers, making it part of the
+        # IP payload when fragmentation is requested.
+        frame = frame / Padding(load=os.urandom(padding_size))
+    return frame
 
 
 def _finish_frames(
@@ -320,16 +356,7 @@ def _finish_frames(
     finished = []
     for frame in frames:
         if profile:
-            if len(frame) > profile.target_frame_size:
-                raise ValueError(
-                    f"Target frame size {profile.target_frame_size} is below the "
-                    f"{proto} minimum of {len(frame)} bytes"
-                )
-            padding_size = profile.target_frame_size - len(frame)
-            if padding_size:
-                # Padding is serialized after protocol layers (not consumed as
-                # part of VRRP authentication data like a Raw payload can be).
-                frame = frame / Padding(load=os.urandom(padding_size))
+            frame = _apply_profile_size(frame, profile, proto)
         finished.append(frame)
         if cfg.fuzz:
             mutated = frame.copy()

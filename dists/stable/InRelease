@@ -1,0 +1,41 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: Fluxgen
+Label: Fluxgen APT Repository
+Suite: stable
+Codename: stable
+Date: Tue, 08 Sep 2026 09:43:51 +0000
+Architectures: amd64 arm64 all
+Components: main
+Description: Fluxgen - Multi-client traffic generator
+MD5Sum:
+ f3e57d119c631520151a2e721391282e 1157 dists/stable/main/binary-all/Packages
+ b4640af6f5012359ce961238d4969c65 740 dists/stable/main/binary-all/Packages.gz
+ f3e57d119c631520151a2e721391282e 1157 dists/stable/main/binary-amd64/Packages
+ b4640af6f5012359ce961238d4969c65 740 dists/stable/main/binary-amd64/Packages.gz
+ f3e57d119c631520151a2e721391282e 1157 dists/stable/main/binary-arm64/Packages
+ b4640af6f5012359ce961238d4969c65 740 dists/stable/main/binary-arm64/Packages.gz
+SHA256:
+ 7bca2b49cf76e687e5ba8e7258ac88c1b4c713584bba97be940434ef203dac23 1157 dists/stable/main/binary-all/Packages
+ 0307875c41627bc0b511cae01aa916cbda3b1ad1430fb42cfbe63f43cdedaae4 740 dists/stable/main/binary-all/Packages.gz
+ 7bca2b49cf76e687e5ba8e7258ac88c1b4c713584bba97be940434ef203dac23 1157 dists/stable/main/binary-amd64/Packages
+ 0307875c41627bc0b511cae01aa916cbda3b1ad1430fb42cfbe63f43cdedaae4 740 dists/stable/main/binary-amd64/Packages.gz
+ 7bca2b49cf76e687e5ba8e7258ac88c1b4c713584bba97be940434ef203dac23 1157 dists/stable/main/binary-arm64/Packages
+ 0307875c41627bc0b511cae01aa916cbda3b1ad1430fb42cfbe63f43cdedaae4 740 dists/stable/main/binary-arm64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEWfRbPva9xkwoZ//sLK+RcxjBYYEFAmqf2NcACgkQLK+RcxjB
+YYH9PRAAowsHxSoHFQlWR9eHuesOZf3a3tBCz9vywzzOjWzz4cHc4w9fLta8JqzZ
+lp16BjuCfKNO0CXNJKSB52AMGLi+gxSydqRL8HF1jmJxd6DOGaPL2nLZpP/ZL3+2
+bU3h7Nk51NQ0wCoMta4XaOVvC2nvYDA4o+KTvqtpLDmSHcP+eoSwAOwQmVvBUxc3
+yAjLEzru70dGIkARxPSQy9s/yyhag3PjEZx82Vs016eWMa0ElJgwEqAPUKuhHgoJ
++1Q00NtV2wgJQdGRnYovRL5N301PUUepE+8aAN9aWthVTPxnEiUH1FjFJJ0s8aKw
+Wu93l+YoIi+ANejEaLq3AGKU6gib5wqn9IYlAwloW+iBVo0+fu9zXnCbLSLJawlI
+Qsg7rcrUbaOy56M96VqEKwK/ZyXn+K+E1prA5PG+exjPI0XtAffg+vQXS80GA0O+
+XAziBCTKpf7dwK+azP6ULD69tEi7QHAq6PwA9HqFvGxumCztjNKHYCKs6kWBSPD9
+DJpq0YN74y2FonoF0B1eayg33OdDOQmdAu3vSGFW0CRamPicuKwyaYXlJTDn52rb
+EVDcvKzM3hiJ8kyGtMJdOJIJ6yCdDRvHbUNuyKYeUdGh3I0XFSI+8ftb9wjZwZss
+XyCRRS1XPvv/N/0v+QBnBcGMgOTetJRoD5xwBNR8L/AvrVeqK5c=
+=NnHa
+-----END PGP SIGNATURE-----

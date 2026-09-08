@@ -1,0 +1,30 @@
+Package: fluxgen
+Version: 2.2.0-1
+Architecture: all
+Maintainer: Kanchan Kumar Jha <kanchankjha@gmail.com>
+Installed-Size: 192
+Depends: python3-psutil, python3-scapy, python3-yaml, python3:any
+Suggests: python3-netifaces
+Filename: pool/main/fluxgen_2.2.0-1_all.deb
+Size: 42504
+MD5sum: 795f6f223f0df3ba33204e2e592dafd4
+SHA1: 5da3fbea7a52555d7a30d6b952ffa446aeb9f31a
+SHA256: 0d101273e944daa31953e3647f8b927cef4ddc802f6eb47be12acdb3385c7ac3
+Section: net
+Priority: optional
+Homepage: https://github.com/kanchankjha/fluxgen
+Description: Multi-client traffic generator inspired by hping3
+ fluxgen is a powerful multi-client traffic generator that simulates
+ many clients on a single Linux host, sending customizable network
+ traffic with spoofed IP/MAC addresses from the same subnet.
+ .
+ Features include:
+  - Multi-client simulation from a single host
+  - Protocol support: TCP, UDP, ICMP, IGMP, GRE, ESP, AH, SCTP
+  - Spoofed identities with unique IP/MAC per client
+  - Flexible traffic patterns with randomization
+  - Custom payloads (text or hex-encoded)
+  - Traffic capture to PCAP files
+  - Flood mode for load testing
+  - YAML/JSON configuration support
+

@@ -1,0 +1,22 @@
+Origin: Fluxgen
+Label: Fluxgen APT Repository
+Suite: stable
+Codename: stable
+Date: Tue, 08 Sep 2026 09:43:51 +0000
+Architectures: amd64 arm64 all
+Components: main
+Description: Fluxgen - Multi-client traffic generator
+MD5Sum:
+ f3e57d119c631520151a2e721391282e 1157 dists/stable/main/binary-all/Packages
+ b4640af6f5012359ce961238d4969c65 740 dists/stable/main/binary-all/Packages.gz
+ f3e57d119c631520151a2e721391282e 1157 dists/stable/main/binary-amd64/Packages
+ b4640af6f5012359ce961238d4969c65 740 dists/stable/main/binary-amd64/Packages.gz
+ f3e57d119c631520151a2e721391282e 1157 dists/stable/main/binary-arm64/Packages
+ b4640af6f5012359ce961238d4969c65 740 dists/stable/main/binary-arm64/Packages.gz
+SHA256:
+ 7bca2b49cf76e687e5ba8e7258ac88c1b4c713584bba97be940434ef203dac23 1157 dists/stable/main/binary-all/Packages
+ 0307875c41627bc0b511cae01aa916cbda3b1ad1430fb42cfbe63f43cdedaae4 740 dists/stable/main/binary-all/Packages.gz
+ 7bca2b49cf76e687e5ba8e7258ac88c1b4c713584bba97be940434ef203dac23 1157 dists/stable/main/binary-amd64/Packages
+ 0307875c41627bc0b511cae01aa916cbda3b1ad1430fb42cfbe63f43cdedaae4 740 dists/stable/main/binary-amd64/Packages.gz
+ 7bca2b49cf76e687e5ba8e7258ac88c1b4c713584bba97be940434ef203dac23 1157 dists/stable/main/binary-arm64/Packages
+ 0307875c41627bc0b511cae01aa916cbda3b1ad1430fb42cfbe63f43cdedaae4 740 dists/stable/main/binary-arm64/Packages.gz
